@@ -13,7 +13,7 @@ import {
   Select,
   MenuItem
 } from '@mui/material';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Register: React.FC = () => {
@@ -23,12 +23,11 @@ const Register: React.FC = () => {
     telephone: '',
     password: '',
     confirmPassword: '',
-    role: 'apprenant' as 'apprenant' | 'formateur'
+    role: 'apprenant' as 'admin' | 'formateur' | 'apprenant' | 'entreprise'
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
-  const navigate = useNavigate();
 
   const handleChange = (e: any) => {
     setFormData({
@@ -40,6 +39,22 @@ const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validation côté client
+    if (!formData.nom || !formData.email || !formData.telephone || !formData.password) {
+      setError('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+
+    if (!formData.email.includes('@')) {
+      setError('Veuillez entrer une adresse email valide');
+      return;
+    }
+
+    if (formData.telephone.length < 8) {
+      setError('Veuillez entrer un numéro de téléphone valide');
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError('Les mots de passe ne correspondent pas');
@@ -56,9 +71,10 @@ const Register: React.FC = () => {
     try {
       const { confirmPassword, ...userData } = formData;
       await register(userData);
-      navigate('/dashboard');
+      // La redirection est gérée dans AuthContext selon le rôle
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Erreur lors de l\'inscription');
+      console.error('Erreur d\'inscription:', err);
+      setError(err.message || 'Erreur lors de l\'inscription. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
@@ -121,6 +137,8 @@ const Register: React.FC = () => {
               >
                 <MenuItem value="apprenant">Apprenant</MenuItem>
                 <MenuItem value="formateur">Formateur</MenuItem>
+                <MenuItem value="entreprise">Entreprise</MenuItem>
+                <MenuItem value="admin">Administrateur</MenuItem>
               </Select>
             </FormControl>
             <TextField

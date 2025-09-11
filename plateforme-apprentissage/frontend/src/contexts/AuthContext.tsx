@@ -33,52 +33,84 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await authService.login(email, password);
-    localStorage.setItem('token', response.token);
-    setUser(response.user);
-    
-    // Redirection selon le rôle de l'utilisateur
-    const userRole = response.user.role;
-    switch (userRole) {
-      case 'admin':
-        window.location.href = '/admin';
-        break;
-      case 'formateur':
-        window.location.href = '/formateur';
-        break;
-      case 'apprenant':
-        window.location.href = '/apprenant';
-        break;
-      case 'entreprise':
-        window.location.href = '/entreprise';
-        break;
-      default:
-        window.location.href = '/home';
+    try {
+      console.log('Tentative de connexion avec:', email);
+      const response = await authService.login(email, password);
+      console.log('Réponse de connexion:', response);
+      
+      if (response.success && response.token && response.user) {
+        localStorage.setItem('token', response.token);
+        setUser(response.user);
+        
+        console.log('Utilisateur connecté:', response.user);
+        
+        // Redirection selon le rôle de l'utilisateur
+        const userRole = response.user.role;
+        console.log('Redirection pour le rôle:', userRole);
+        
+        switch (userRole) {
+          case 'admin':
+            window.location.href = '/admin';
+            break;
+          case 'formateur':
+            window.location.href = '/formateur';
+            break;
+          case 'apprenant':
+            window.location.href = '/apprenant';
+            break;
+          case 'entreprise':
+            window.location.href = '/entreprise';
+            break;
+          default:
+            window.location.href = '/dashboard';
+        }
+      } else {
+        throw new Error('Réponse de connexion invalide');
+      }
+    } catch (error) {
+      console.error('Erreur de connexion:', error);
+      throw error;
     }
   };
 
   const register = async (userData: Partial<User> & { password?: string }) => {
-    const response = await authService.register(userData);
-    localStorage.setItem('token', response.token);
-    setUser(response.user);
-    
-    // Redirection selon le rôle de l'utilisateur après inscription
-    const userRole = response.user.role;
-    switch (userRole) {
-      case 'admin':
-        window.location.href = '/admin';
-        break;
-      case 'formateur':
-        window.location.href = '/formateur';
-        break;
-      case 'apprenant':
-        window.location.href = '/apprenant';
-        break;
-      case 'entreprise':
-        window.location.href = '/entreprise';
-        break;
-      default:
-        window.location.href = '/home';
+    try {
+      console.log('Tentative d\'inscription avec:', userData);
+      const response = await authService.register(userData);
+      console.log('Réponse d\'inscription:', response);
+      
+      if (response.success && response.token && response.user) {
+        localStorage.setItem('token', response.token);
+        setUser(response.user);
+        
+        console.log('Utilisateur inscrit:', response.user);
+        
+        // Redirection selon le rôle de l'utilisateur après inscription
+        const userRole = response.user.role;
+        console.log('Redirection pour le rôle:', userRole);
+        
+        switch (userRole) {
+          case 'admin':
+            window.location.href = '/admin';
+            break;
+          case 'formateur':
+            window.location.href = '/formateur';
+            break;
+          case 'apprenant':
+            window.location.href = '/apprenant';
+            break;
+          case 'entreprise':
+            window.location.href = '/entreprise';
+            break;
+          default:
+            window.location.href = '/dashboard';
+        }
+      } else {
+        throw new Error('Réponse d\'inscription invalide');
+      }
+    } catch (error) {
+      console.error('Erreur d\'inscription:', error);
+      throw error;
     }
   };
 
@@ -89,12 +121,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     window.location.href = '/';
   };
 
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+  };
+
   const value: AuthContextType = {
     user,
     login,
     register,
     logout,
-    loading
+    loading,
+    updateUser
   };
 
   return (

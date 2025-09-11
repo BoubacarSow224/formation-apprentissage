@@ -16,24 +16,31 @@ exports.protect = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
 
       // Vérifier le token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'votre_secret_tres_secret');
 
       // Récupérer l'utilisateur à partir du token
       req.user = await User.findById(decoded.id).select('-password');
 
       if (!req.user) {
-        return next(new ErrorResponse('Utilisateur non trouvé', 404));
+        return res.status(404).json({
+          success: false,
+          message: 'Utilisateur non trouvé'
+        });
       }
 
       next();
     } catch (error) {
-      console.error(error);
-      return next(new ErrorResponse('Non autorisé, token invalide', 401));
+      console.error('Erreur d\'authentification:', error);
+      return res.status(401).json({
+        success: false,
+        message: 'Non autorisé, token invalide'
+      });
     }
-  }
-
-  if (!token) {
-    return next(new ErrorResponse('Non autorisé, pas de token', 401));
+  } else {
+    return res.status(401).json({
+      success: false,
+      message: 'Non autorisé, pas de token'
+    });
   }
 };
 
@@ -41,16 +48,17 @@ exports.protect = async (req, res, next) => {
 exports.authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return next(new ErrorResponse('Utilisateur non authentifié', 401));
+      return res.status(401).json({
+        success: false,
+        message: 'Utilisateur non authentifié'
+      });
     }
 
     if (!roles.includes(req.user.role)) {
-      return next(
-        new ErrorResponse(
-          `Le rôle ${req.user.role} n'est pas autorisé à accéder à cette ressource`,
-          403
-        )
-      );
+      return res.status(403).json({
+        success: false,
+        message: `Le rôle ${req.user.role} n'est pas autorisé à accéder à cette ressource`
+      });
     }
     next();
   };

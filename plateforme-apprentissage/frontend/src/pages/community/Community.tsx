@@ -15,7 +15,6 @@ import {
   ListItem,
   ListItemAvatar,
   ListItemText,
-  IconButton,
   Tab,
   Tabs
 } from '@mui/material';
@@ -29,7 +28,6 @@ import {
   TrendingUp
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { messageService } from '../../services/messageService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -120,10 +118,41 @@ const Community: React.FC = () => {
     if (!newPost.trim() || !user) return;
 
     try {
-      // Simuler la création d'un nouveau post
+      const response = await fetch('http://localhost:5003/api/community/posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          content: newPost
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Ajouter le nouveau post en tête de liste
+        const newPostData = {
+          id: data.post._id,
+          author: { nom: user.nom, avatar: user.photoProfil || '' },
+          content: newPost,
+          likes: 0,
+          comments: 0,
+          timestamp: new Date()
+        };
+
+        setPosts([newPostData, ...posts]);
+        setNewPost('');
+      } else {
+        console.error('Erreur lors de la création du post:', data.message);
+      }
+    } catch (error) {
+      console.error('Erreur lors de la création du post:', error);
+      // Fallback en mode local si le serveur ne répond pas
       const newPostData = {
         id: Date.now(),
-        author: { nom: user.nom, avatar: '' },
+        author: { nom: user.nom, avatar: user.photoProfil || '' },
         content: newPost,
         likes: 0,
         comments: 0,
@@ -132,8 +161,6 @@ const Community: React.FC = () => {
 
       setPosts([newPostData, ...posts]);
       setNewPost('');
-    } catch (error) {
-      console.error('Erreur lors de la création du post:', error);
     }
   };
 
@@ -181,7 +208,11 @@ const Community: React.FC = () => {
               <Card sx={{ mb: 3 }}>
                 <CardContent>
                   <Box display="flex" gap={2}>
-                    <Avatar>{user.nom.charAt(0).toUpperCase()}</Avatar>
+                    <Avatar 
+                      src={user?.photoProfil && user.photoProfil !== 'default.jpg' ? `http://localhost:5003/uploads/profiles/${user.photoProfil}` : undefined}
+                    >
+                      {user?.nom?.charAt(0)?.toUpperCase() || 'U'}
+                    </Avatar>
                     <Box flexGrow={1}>
                       <TextField
                         fullWidth
@@ -213,7 +244,11 @@ const Community: React.FC = () => {
               <Card key={post.id} sx={{ mb: 3 }}>
                 <CardContent>
                   <Box display="flex" alignItems="center" gap={2} mb={2}>
-                    <Avatar>{post.author.nom.charAt(0).toUpperCase()}</Avatar>
+                    <Avatar 
+                      src={post.author?.avatar && post.author.avatar !== 'default.jpg' ? `http://localhost:5003/uploads/profiles/${post.author.avatar}` : undefined}
+                    >
+                      {post.author?.nom?.charAt(0)?.toUpperCase() || 'U'}
+                    </Avatar>
                     <Box>
                       <Typography variant="subtitle1" fontWeight="bold">
                         {post.author.nom}
@@ -287,7 +322,7 @@ const Community: React.FC = () => {
                     <React.Fragment key={discussion.id}>
                       <ListItem alignItems="flex-start">
                         <ListItemAvatar>
-                          <Avatar>{discussion.author.charAt(0).toUpperCase()}</Avatar>
+                          <Avatar>{discussion.author?.charAt(0)?.toUpperCase() || 'U'}</Avatar>
                         </ListItemAvatar>
                         <ListItemText
                           primary={discussion.title}

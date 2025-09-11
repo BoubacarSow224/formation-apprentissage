@@ -189,4 +189,5 @@ export interface AuthContextType {
   register: (userData: Partial<User> & { password?: string }) => Promise<void>;
   logout: () => void;
   loading: boolean;
+  updateUser: (user: User) => void;
 }

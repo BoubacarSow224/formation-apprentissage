@@ -16,6 +16,7 @@ import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import FormateurDashboard from './pages/FormateurDashboard';
 import ApprenantDashboard from './pages/ApprenantDashboard';
+import EntrepriseDashboard from './pages/EntrepriseDashboard';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -94,7 +95,7 @@ function App() {
               } />
               <Route path="/entreprise" element={
                 <ProtectedRoute>
-                  <Dashboard />
+                  <EntrepriseDashboard />
                 </ProtectedRoute>
               } />
             </Routes>

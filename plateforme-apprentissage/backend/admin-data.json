@@ -1,0 +1,9 @@
+{
+  
+    "nom": "Super Administrateur",
+    "email": "admin@plateforme.com",
+    "password": "$2a$10$aESJI7fnu/3bKs8zol5xcdqkaFmETT/PscEskF/",
+    "role": "admin",
+    "telephone": "+221 77 123 45 67"
+    
+}

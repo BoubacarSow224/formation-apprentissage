@@ -15,19 +15,20 @@ import {
   ListItemText,
   ListItemIcon,
   Chip,
-  Avatar
+  Avatar,
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import {
   School,
   Add,
   VideoLibrary,
-  Quiz,
   People,
   TrendingUp,
-  Assignment,
   Star
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
+import { coursService } from '../services/coursService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -53,30 +54,104 @@ function TabPanel(props: TabPanelProps) {
 const FormateurDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const [tabValue, setTabValue] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [stats, setStats] = useState({
+    coursCreated: 0,
+    totalStudents: 0,
+    averageRating: 0,
+    totalRevenue: 0
+  });
+  const [recentCourses, setRecentCourses] = useState<any[]>([]);
+  const [recentStudents, setRecentStudents] = useState<any[]>([]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
-  // Données simulées pour le formateur
-  const stats = {
-    coursCreated: 5,
-    totalStudents: 127,
-    averageRating: 4.6,
-    totalRevenue: 2450
-  };
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+        setError('');
 
-  const recentCourses = [
-    { id: 1, title: 'Couture moderne', students: 45, status: 'Publié', rating: 4.8 },
-    { id: 2, title: 'Techniques avancées', students: 32, status: 'En cours', rating: 4.5 },
-    { id: 3, title: 'Broderie traditionnelle', students: 28, status: 'En attente', rating: 4.7 }
-  ];
+        // Charger les statistiques du formateur
+        try {
+          const statsResponse = await coursService.getStatistiquesFormateur();
+          if (statsResponse?.success) {
+            setStats(statsResponse.data);
+          } else {
+            // Données par défaut si pas de réponse
+            setStats({
+              coursCreated: 0,
+              totalStudents: 0,
+              averageRating: 0,
+              totalRevenue: 0
+            });
+          }
+        } catch (error) {
+          console.error('Erreur lors du chargement des statistiques:', error);
+          setStats({
+            coursCreated: 0,
+            totalStudents: 0,
+            averageRating: 0,
+            totalRevenue: 0
+          });
+        }
 
-  const recentStudents = [
-    { id: 1, name: 'Fatou Sall', course: 'Couture moderne', progress: 85 },
-    { id: 2, name: 'Amadou Ba', course: 'Techniques avancées', progress: 60 },
-    { id: 3, name: 'Aissatou Diop', course: 'Broderie traditionnelle', progress: 92 }
-  ];
+        // Charger les cours récents
+        try {
+          const coursResponse = await coursService.getCoursRecentsFormateur();
+          if (Array.isArray(coursResponse)) {
+            setRecentCourses(coursResponse);
+          } else if ((coursResponse as any)?.success) {
+            setRecentCourses((coursResponse as any).data || []);
+          } else {
+            setRecentCourses([]);
+          }
+        } catch (error) {
+          console.error('Erreur lors du chargement des cours récents:', error);
+          setRecentCourses([]);
+        }
+
+        // Charger les étudiants récents
+        try {
+          const etudiantsResponse = await coursService.getEtudiantsRecentsFormateur();
+          if (Array.isArray(etudiantsResponse)) {
+            setRecentStudents(etudiantsResponse);
+          } else if ((etudiantsResponse as any)?.success) {
+            setRecentStudents((etudiantsResponse as any).data || []);
+          } else {
+            setRecentStudents([]);
+          }
+        } catch (error) {
+          console.error('Erreur lors du chargement des étudiants récents:', error);
+          setRecentStudents([]);
+        }
+
+      } catch (err: any) {
+        console.error('Erreur lors du chargement du dashboard:', err);
+        setError('Erreur lors du chargement des données');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user?.role === 'formateur') {
+      loadDashboardData();
+    }
+  }, [user]);
+
+  if (loading) {
+    return (
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Chargement du dashboard...
+        </Typography>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
@@ -94,6 +169,12 @@ const FormateurDashboard: React.FC = () => {
           Déconnexion
         </Button>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
       {/* Statistiques */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -190,12 +271,12 @@ const FormateurDashboard: React.FC = () => {
               </Typography>
               <List>
                 {recentCourses.map((course) => (
-                  <ListItem key={course.id}>
+                  <ListItem key={course._id}>
                     <ListItemIcon>
                       <VideoLibrary />
                     </ListItemIcon>
                     <ListItemText
-                      primary={course.title}
+                      primary={course.titre}
                       secondary={`${course.students} étudiants • Note: ${course.rating}`}
                     />
                     <Chip 
@@ -242,11 +323,11 @@ const FormateurDashboard: React.FC = () => {
         </Box>
         <Grid container spacing={3}>
           {recentCourses.map((course) => (
-            <Grid item xs={12} md={4} key={course.id}>
+            <Grid item xs={12} md={4} key={course._id}>
               <Card>
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
-                    {course.title}
+                    {course.titre}
                   </Typography>
                   <Typography color="text.secondary" gutterBottom>
                     {course.students} étudiants inscrits

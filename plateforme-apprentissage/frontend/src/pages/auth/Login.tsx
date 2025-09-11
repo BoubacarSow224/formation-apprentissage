@@ -9,7 +9,7 @@ import {
   Alert,
   Link as MuiLink
 } from '@mui/material';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Login: React.FC = () => {
@@ -18,18 +18,31 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    // Validation côté client
+    if (!email || !password) {
+      setError('Veuillez remplir tous les champs');
+      setLoading(false);
+      return;
+    }
+
+    if (!email.includes('@')) {
+      setError('Veuillez entrer une adresse email valide');
+      setLoading(false);
+      return;
+    }
+
     try {
       await login(email, password);
-      navigate('/dashboard');
+      // La redirection est gérée dans AuthContext selon le rôle
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Erreur de connexion');
+      console.error('Erreur de connexion:', err);
+      setError(err.message || 'Erreur de connexion. Vérifiez vos identifiants.');
     } finally {
       setLoading(false);
     }

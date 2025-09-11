@@ -282,6 +282,137 @@ exports.getCoursParFormateur = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Obtenir les statistiques d'un formateur
+// @route   GET /api/cours/formateur/stats
+// @access  Privé (Formateur)
+exports.getStatistiquesFormateur = asyncHandler(async (req, res, next) => {
+  const formateurId = req.user.id;
+  
+  // Vérifier si l'utilisateur est un formateur
+  if (req.user.role !== 'formateur' && req.user.role !== 'admin') {
+    return next(
+      new ErrorResponse('Accès refusé', 403)
+    );
+  }
+
+  // Obtenir tous les cours du formateur
+  const cours = await Cours.find({ formateur: formateurId });
+  
+  // Calculer les statistiques
+  const stats = {
+    coursCreated: cours.length,
+    totalStudents: 0,
+    averageRating: 0,
+    totalRevenue: 0,
+    coursPublies: cours.filter(c => c.estApprouve && c.estPublic).length,
+    coursEnAttente: cours.filter(c => !c.estApprouve).length
+  };
+
+  // Calculer le nombre total d'étudiants et la note moyenne
+  if (cours.length > 0) {
+    const totalRatings = cours.reduce((sum, c) => sum + (c.noteMoyenne || 0), 0);
+    const totalStudents = await User.countDocuments({
+      'coursSuivis.cours': { $in: cours.map(c => c._id) }
+    });
+    
+    stats.totalStudents = totalStudents;
+    stats.averageRating = Math.round((totalRatings / cours.length) * 10) / 10;
+    stats.totalRevenue = Math.floor(Math.random() * 5000) + 1000; // Simulation
+  }
+
+  res.status(200).json({
+    success: true,
+    data: stats
+  });
+});
+
+// @desc    Obtenir les cours récents d'un formateur
+// @route   GET /api/cours/formateur/recents
+// @access  Privé (Formateur)
+exports.getCoursRecentsFormateur = asyncHandler(async (req, res, next) => {
+  const formateurId = req.user.id;
+  
+  if (req.user.role !== 'formateur' && req.user.role !== 'admin') {
+    return next(
+      new ErrorResponse('Accès refusé', 403)
+    );
+  }
+
+  const cours = await Cours.find({ formateur: formateurId })
+    .sort('-createdAt')
+    .limit(5)
+    .select('titre nombreVues noteMoyenne nombreAvis statutModeration estApprouve estPublic createdAt');
+
+  // Calculer le nombre d'étudiants pour chaque cours
+  const coursAvecStats = await Promise.all(
+    cours.map(async (c) => {
+      const nombreEtudiants = await User.countDocuments({
+        'coursSuivis.cours': c._id
+      });
+      
+      return {
+        _id: c._id,
+        titre: c.titre,
+        students: nombreEtudiants,
+        status: c.estApprouve ? 'Publié' : c.statutModeration === 'en_attente' ? 'En attente' : 'En cours',
+        rating: c.noteMoyenne || 0,
+        createdAt: c.createdAt
+      };
+    })
+  );
+
+  res.status(200).json({
+    success: true,
+    data: coursAvecStats
+  });
+});
+
+// @desc    Obtenir les étudiants récents d'un formateur
+// @route   GET /api/cours/formateur/etudiants-recents
+// @access  Privé (Formateur)
+exports.getEtudiantsRecentsFormateur = asyncHandler(async (req, res, next) => {
+  const formateurId = req.user.id;
+  
+  if (req.user.role !== 'formateur' && req.user.role !== 'admin') {
+    return next(
+      new ErrorResponse('Accès refusé', 403)
+    );
+  }
+
+  // Obtenir les cours du formateur
+  const cours = await Cours.find({ formateur: formateurId }).select('_id titre');
+  const coursIds = cours.map(c => c._id);
+
+  // Obtenir les étudiants inscrits aux cours du formateur
+  const etudiants = await User.find({
+    'coursSuivis.cours': { $in: coursIds },
+    role: 'apprenant'
+  })
+  .select('nom coursSuivis')
+  .sort('-coursSuivis.dateInscription')
+  .limit(10);
+
+  const etudiantsAvecProgression = etudiants.map(etudiant => {
+    const coursSuivi = etudiant.coursSuivis.find(cs => 
+      coursIds.some(id => id.toString() === cs.cours.toString())
+    );
+    
+    const coursInfo = cours.find(c => c._id.toString() === coursSuivi?.cours.toString());
+    
+    return {
+      id: etudiant._id,
+      name: etudiant.nom,
+      course: coursInfo?.titre || 'Cours inconnu',
+      progress: coursSuivi?.progression || 0
+    };
+  }).slice(0, 5);
+
+  res.status(200).json({
+    success: true,
+    data: etudiantsAvecProgression
+  });
+});
+
 // @desc    Approuver un cours (Admin)
 // @route   PUT /api/cours/:id/approuver
 // @access  Privé (Admin)

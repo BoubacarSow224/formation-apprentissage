@@ -14,8 +14,9 @@ const adminAuth = async (req, res, next) => {
       });
     }
 
-    // Vérifier le token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Vérifier le token avec une clé par défaut si JWT_SECRET n'est pas défini
+    const jwtSecret = process.env.JWT_SECRET || 'votre_cle_secrete_par_defaut';
+    const decoded = jwt.verify(token, jwtSecret);
     
     // Récupérer l'utilisateur depuis la base de données
     const user = await User.findById(decoded.userId).select('-password');

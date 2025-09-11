@@ -269,6 +269,21 @@ export const coursService = {
     return response.data;
   },
 
+  async getStatistiquesFormateur(): Promise<any> {
+    const response = await api.get('/cours/formateur/stats');
+    return response.data;
+  },
+
+  async getCoursRecentsFormateur(): Promise<any[]> {
+    const response = await api.get('/cours/formateur/recents');
+    return response.data;
+  },
+
+  async getEtudiantsRecentsFormateur(): Promise<any[]> {
+    const response = await api.get('/cours/formateur/etudiants-recents');
+    return response.data;
+  },
+
   async getStatistiquesGlobales(): Promise<any> {
     const response = await api.get('/cours/statistiques-globales');
     return response.data;

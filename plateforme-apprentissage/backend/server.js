@@ -52,11 +52,18 @@ if (!require('fs').existsSync(uploadDir)) {
 }
 
 // Middleware de sécurité
-console.log('Configuration des middlewares de sécurité...');
+console.log('Configuration CORS...');
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:60695'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  preflightContinue: false,
+  optionsSuccessStatus: 200
+})); // Active CORS avec configuration spécifique
+console.log('CORS configuré');
 app.use(helmet()); // Sécurise les en-têtes HTTP
 console.log('Helmet configuré');
-app.use(cors()); // Active CORS
-console.log('CORS configuré');
 app.use(express.json({ limit: '10mb' })); // Limite la taille du corps des requêtes
 console.log('Middleware JSON configuré');
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -78,8 +85,8 @@ app.use(fileupload({
 }));
 console.log('Middleware de téléchargement de fichiers configuré');
 
-// Servir les fichiers statiques
-console.log('Configuration du service de fichiers statiques...');
+// Middleware pour servir les fichiers statiques
+console.log('Configuration du middleware pour servir les fichiers statiques...');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 console.log('Service de fichiers statiques configuré');
 
@@ -134,6 +141,11 @@ console.log('Configuration de la route /api/messages...');
 app.use('/api/messages', messageRoutes);
 console.log('Route /api/messages configurée');
 
+console.log('Configuration de la route /api/community...');
+const communityRoutes = require('./routes/communityRoutes');
+app.use('/api/community', communityRoutes);
+console.log('Route /api/community configurée');
+
 console.log('Configuration de la route /api/quiz...');
 app.use('/api/quiz', quizRoutes);
 console.log('Route /api/quiz configurée');
@@ -156,7 +168,7 @@ app.use(errorHandler); // Gestion des erreurs globales
 console.log('Middleware errorHandler configuré');
 
 // Configuration du port
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5006;
 console.log('Port du serveur:', PORT);
 
 // Démarrer le serveur

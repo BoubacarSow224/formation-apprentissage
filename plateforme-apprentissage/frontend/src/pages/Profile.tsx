@@ -19,7 +19,8 @@ import {
   Tabs,
   Switch,
   FormControlLabel,
-  Alert
+  Alert,
+  IconButton
 } from '@mui/material';
 import {
   Edit,
@@ -29,11 +30,12 @@ import {
   Email,
   Phone,
   LocationOn,
-  Language,
   Security,
   Notifications,
   Visibility,
-  Save
+  Save,
+  PhotoCamera,
+  Delete
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -59,16 +61,17 @@ function TabPanel(props: TabPanelProps) {
 }
 
 const Profile: React.FC = () => {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [tabValue, setTabValue] = useState(0);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     nom: user?.nom || '',
     email: user?.email || '',
-    telephone: '',
+    telephone: user?.telephone || '',
     localisation: '',
-    bio: '',
-    competences: [] as string[],
+    bio: user?.bio || '',
+    competences: user?.competences || [] as string[],
+    langues: user?.langues || [] as string[],
     experience: '',
     education: ''
   });
@@ -80,6 +83,7 @@ const Profile: React.FC = () => {
     showProgress: true
   });
   const [saveMessage, setSaveMessage] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -134,12 +138,124 @@ const Profile: React.FC = () => {
     }));
   };
 
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    console.log('📸 Début upload photo:', file.name, file.size, file.type);
+
+    // Vérifier le type de fichier
+    if (!file.type.startsWith('image/')) {
+      setSaveMessage('Veuillez sélectionner un fichier image valide');
+      return;
+    }
+
+    // Vérifier la taille (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setSaveMessage('La taille de l\'image ne doit pas dépasser 5MB');
+      return;
+    }
+
+    setUploadingPhoto(true);
+    const formData = new FormData();
+    formData.append('photo', file);
+
+    try {
+      console.log('🚀 Envoi de la requête upload...');
+      const response = await fetch('http://localhost:5003/api/auth/upload-photo', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      console.log('📡 Réponse serveur:', response.status, response.statusText);
+      const data = await response.json();
+      console.log('📋 Données reçues:', data);
+      
+      if (data.success) {
+        setSaveMessage('Photo de profil mise à jour avec succès !');
+        console.log('✅ Upload réussi, nouveau nom:', data.photoProfil);
+        
+        // Mettre à jour le contexte utilisateur avec la nouvelle photo
+        if (user && data.user) {
+          console.log('🔄 Mise à jour du contexte utilisateur...');
+          const updatedUser = { ...user, photoProfil: data.user.photoProfil };
+          updateUser(updatedUser);
+          console.log('✅ Contexte mis à jour:', updatedUser.photoProfil);
+        }
+      } else {
+        console.error('❌ Erreur upload:', data.message);
+        setSaveMessage(data.message || 'Erreur lors de l\'upload de la photo');
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors de l\'upload:', error);
+      setSaveMessage('Erreur lors de l\'upload de la photo');
+    } finally {
+      setUploadingPhoto(false);
+      setTimeout(() => setSaveMessage(''), 3000);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer votre photo de profil ?')) {
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      const response = await fetch('http://localhost:5003/api/auth/delete-photo', {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSaveMessage('Photo de profil supprimée avec succès !');
+        // Mettre à jour le contexte utilisateur
+        if (user) {
+          const updatedUser = { ...user, photoProfil: 'default.jpg' };
+          updateUser(updatedUser);
+        }
+      } else {
+        setSaveMessage(data.message || 'Erreur lors de la suppression');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la suppression:', error);
+      setSaveMessage('Erreur lors de la suppression de la photo');
+    } finally {
+      setUploadingPhoto(false);
+      setTimeout(() => setSaveMessage(''), 3000);
+    }
+  };
+
   const handleSaveProfile = async () => {
     try {
-      // Simuler la sauvegarde du profil
-      console.log('Sauvegarde du profil:', formData);
-      setSaveMessage('Profil mis à jour avec succès !');
-      setEditing(false);
+      const response = await fetch('http://localhost:5003/api/auth/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setSaveMessage('Profil mis à jour avec succès !');
+        // Mettre à jour le contexte utilisateur avec les nouvelles données
+        if (user && data.user) {
+          updateUser(data.user);
+        }
+        setEditing(false);
+      } else {
+        setSaveMessage(data.message || 'Erreur lors de la sauvegarde');
+      }
       
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (error) {
@@ -198,15 +314,68 @@ const Profile: React.FC = () => {
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent sx={{ textAlign: 'center' }}>
-                <Avatar sx={{ width: 120, height: 120, mx: 'auto', mb: 2, fontSize: '3rem' }}>
-                  {user.nom.charAt(0).toUpperCase()}
-                </Avatar>
+                <Box position="relative" display="inline-block">
+                  <Avatar 
+                    sx={{ width: 120, height: 120, mx: 'auto', mb: 2, fontSize: '3rem' }}
+                    src={user?.photoProfil && user.photoProfil !== 'default.jpg' ? `http://localhost:5003/uploads/profiles/${user.photoProfil}?v=${Date.now()}` : undefined}
+                    key={`${user?.photoProfil || 'default'}-${Date.now()}`}
+                  >
+                    {!user?.photoProfil || user.photoProfil === 'default.jpg' ? (user?.nom?.charAt(0)?.toUpperCase() || 'U') : ''}
+                  </Avatar>
+                  {editing && (
+                    <>
+                      <input
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        id="photo-upload"
+                        type="file"
+                        onChange={handlePhotoUpload}
+                      />
+                      <label htmlFor="photo-upload">
+                        <IconButton
+                          component="span"
+                          sx={{
+                            position: 'absolute',
+                            bottom: 8,
+                            right: 8,
+                            backgroundColor: 'primary.main',
+                            color: 'white',
+                            '&:hover': { backgroundColor: 'primary.dark' },
+                            width: 32,
+                            height: 32
+                          }}
+                          disabled={uploadingPhoto}
+                        >
+                          <PhotoCamera fontSize="small" />
+                        </IconButton>
+                      </label>
+                      {user?.photoProfil && user.photoProfil !== 'default.jpg' && (
+                        <IconButton
+                          sx={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            backgroundColor: 'error.main',
+                            color: 'white',
+                            '&:hover': { backgroundColor: 'error.dark' },
+                            width: 32,
+                            height: 32
+                          }}
+                          onClick={handlePhotoDelete}
+                          disabled={uploadingPhoto}
+                        >
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      )}
+                    </>
+                  )}
+                </Box>
                 <Typography variant="h5" gutterBottom>
-                  {user.nom}
+                  {user?.nom || 'Utilisateur'}
                 </Typography>
-                <Chip label={user.role} color="primary" sx={{ mb: 2 }} />
+                <Chip label={user?.role || 'Utilisateur'} color="primary" sx={{ mb: 2 }} />
                 <Typography variant="body2" color="text.secondary" paragraph>
-                  Membre depuis {formatDate(new Date(user.dateInscription || Date.now()))}
+                  Membre depuis {formatDate(new Date(user?.dateInscription || Date.now()))}
                 </Typography>
                 <Button
                   variant={editing ? 'contained' : 'outlined'}
@@ -307,11 +476,29 @@ const Profile: React.FC = () => {
                   Compétences
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={1} mb={3}>
-                  {['JavaScript', 'React', 'Node.js', 'Python', 'HTML/CSS'].map((skill) => (
-                    <Chip key={skill} label={skill} variant="outlined" />
+                  {formData.competences.map((skill, index) => (
+                    <Chip 
+                      key={index} 
+                      label={skill} 
+                      variant="outlined"
+                      onDelete={editing ? () => {
+                        const newCompetences = formData.competences.filter((_, i) => i !== index);
+                        handleInputChange('competences', newCompetences);
+                      } : undefined}
+                    />
                   ))}
                   {editing && (
-                    <Chip label="+ Ajouter" variant="outlined" color="primary" />
+                    <Chip 
+                      label="+ Ajouter" 
+                      variant="outlined" 
+                      color="primary"
+                      onClick={() => {
+                        const newSkill = prompt('Nouvelle compétence:');
+                        if (newSkill) {
+                          handleInputChange('competences', [...formData.competences, newSkill]);
+                        }
+                      }}
+                    />
                   )}
                 </Box>
 
