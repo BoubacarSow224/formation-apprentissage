@@ -135,7 +135,15 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-  derniereConnexion: Date
+  derniereConnexion: Date,
+  // Statut en ligne
+  enLigne: {
+    type: Boolean,
+    default: false
+  },
+  derniereActiviteAt: {
+    type: Date
+  }
 });
 
 // Hacher le mot de passe avant de sauvegarder l'utilisateur

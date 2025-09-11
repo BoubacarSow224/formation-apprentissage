@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const path = require('path');
 const fs = require('fs').promises;
+const bcrypt = require('bcryptjs');
 
 // Générer un token JWT
 const generateToken = (id) => {
@@ -151,7 +152,8 @@ exports.login = async (req, res) => {
     }
 
     // Vérifier si le compte est actif
-    if (!user.estActif) {
+    // Important: traiter les anciens utilisateurs qui n'ont pas le champ estActif (undefined) comme actifs
+    if (user.estActif === false) {
       return res.status(401).json({ 
         success: false,
         message: 'Votre compte a été désactivé. Contactez l\'administrateur.' 
@@ -159,7 +161,24 @@ exports.login = async (req, res) => {
     }
 
     // Vérifier le mot de passe
-    const isMatch = await user.comparePassword(password);
+    let isMatch = await user.comparePassword(password);
+    
+    // Compatibilité rétroactive: si l'ancien compte stocke un mot de passe en clair
+    // et que la comparaison bcrypt échoue, on vérifie l'égalité directe puis on migre en hashant
+    if (!isMatch) {
+      try {
+        if (typeof user.password === 'string' && user.password === password) {
+          // Réinitialiser le mot de passe pour déclencher le pre-save (hash)
+          user.password = password;
+          await user.save();
+          isMatch = true;
+          console.log('Mot de passe en clair détecté et migré (hashé) pour:', email);
+        }
+      } catch (migrateErr) {
+        console.error('Erreur lors de la migration du mot de passe pour', email, migrateErr);
+      }
+    }
+
     if (!isMatch) {
       console.log('Mot de passe incorrect pour:', email);
       return res.status(401).json({ 
@@ -168,8 +187,10 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Mettre à jour la dernière connexion
+    // Mettre à jour la dernière connexion et le statut en ligne
     user.derniereConnexion = new Date();
+    user.enLigne = true;
+    user.derniereActiviteAt = new Date();
     await user.save();
 
     // Générer le token
@@ -188,7 +209,9 @@ exports.login = async (req, res) => {
         telephone: user.telephone,
         role: user.role,
         dateInscription: user.dateInscription,
-        derniereConnexion: user.derniereConnexion
+        derniereConnexion: user.derniereConnexion,
+        enLigne: user.enLigne,
+        derniereActiviteAt: user.derniereActiviteAt
       }
     });
   } catch (error) {
@@ -308,6 +331,34 @@ exports.me = async (req, res) => {
       success: false,
       message: 'Erreur lors de la récupération du profil', 
       error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur interne'
+    });
+  }
+};
+
+// Déconnexion utilisateur: marquer hors ligne
+exports.logout = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+
+    user.enLigne = false;
+    user.derniereActiviteAt = new Date();
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: 'Déconnexion réussie'
+    });
+  } catch (error) {
+    console.error('Erreur lors de la déconnexion:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la déconnexion'
     });
   }
 };

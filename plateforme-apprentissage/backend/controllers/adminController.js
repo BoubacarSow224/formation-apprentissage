@@ -13,7 +13,10 @@ const getAdminStats = async (req, res) => {
   try {
     // Statistiques des utilisateurs
     const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ actif: true });
+    // Utilisateurs actifs en ligne (dernière activité < 5 minutes)
+    const ACTIVE_WINDOW_MINUTES = 5;
+    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_MINUTES * 60 * 1000);
+    const activeUsers = await User.countDocuments({ enLigne: true, derniereActiviteAt: { $gte: activeSince } });
     
     // Nouveaux utilisateurs ce mois
     const startOfMonth = new Date();
@@ -261,19 +264,39 @@ const getUsers = async (req, res) => {
       filter.role = role;
     }
     
-    if (status === 'active') {
-      filter.actif = true;
-    } else if (status === 'inactive') {
-      filter.actif = false;
+    // Filtre de statut (actif/inactif) basé sur enLigne + derniereActiviteAt
+    if (status === 'active' || status === 'inactive') {
+      const ACTIVE_WINDOW_MINUTES = 5;
+      const activeSince = new Date(Date.now() - ACTIVE_WINDOW_MINUTES * 60 * 1000);
+      if (status === 'active') {
+        filter.enLigne = true;
+        filter.derniereActiviteAt = { $gte: activeSince };
+      } else {
+        // Inactif: soit pas enLigne, soit pas d'activité récente
+        filter.$or = [
+          { enLigne: { $ne: true } },
+          { derniereActiviteAt: { $lt: activeSince } }
+        ];
+      }
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const users = await User.find(filter)
+    const usersRaw = await User.find(filter)
       .select('-password')
       .sort({ dateInscription: -1 })
       .skip(skip)
       .limit(parseInt(limit));
+
+    // Ajouter un champ 'actif' calculé pour compatibilité avec le frontend
+    const ACTIVE_WINDOW_MINUTES = 5;
+    const activeSinceCalc = new Date(Date.now() - ACTIVE_WINDOW_MINUTES * 60 * 1000);
+    const users = usersRaw.map(u => {
+      const obj = u.toObject();
+      const isActive = !!obj.enLigne && obj.derniereActiviteAt && new Date(obj.derniereActiviteAt) >= activeSinceCalc;
+      obj.actif = isActive;
+      return obj;
+    });
 
     const total = await User.countDocuments(filter);
     const totalPages = Math.ceil(total / parseInt(limit));
@@ -697,7 +720,9 @@ const getSystemStats = async (req, res) => {
     
     // Stats utilisateurs
     const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ actif: true });
+    const ACTIVE_WINDOW_MINUTES = 5;
+    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_MINUTES * 60 * 1000);
+    const activeUsers = await User.countDocuments({ enLigne: true, derniereActiviteAt: { $gte: activeSince } });
     const adminUsers = await User.countDocuments({ role: 'admin' });
     const formateurUsers = await User.countDocuments({ role: 'formateur' });
     const apprenantUsers = await User.countDocuments({ role: 'apprenant' });

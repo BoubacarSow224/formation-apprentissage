@@ -90,15 +90,27 @@ console.log('Configuration du middleware pour servir les fichiers statiques...')
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 console.log('Service de fichiers statiques configuré');
 
-// Limiter le nombre de requêtes
+// Limiter le nombre de requêtes (désactivé en développement, appliqué sélectivement en production)
 console.log('Configuration du rate limiting...');
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limite chaque IP à 100 requêtes par fenêtre
-  message: 'Trop de requêtes depuis cette adresse IP, veuillez réessayer plus tard.'
-});
-app.use(limiter);
-console.log('Rate limiting configuré');
+const isDev = (process.env.NODE_ENV || 'development') === 'development';
+let limiter;
+if (!isDev) {
+  limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // augmente la limite pour les endpoints publics
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: 'Trop de requêtes depuis cette adresse IP, veuillez réessayer plus tard.'
+  });
+  // Appliquer le limiter uniquement sur des routes sensibles
+  app.use('/api/auth', limiter);
+  app.use('/api/admin', limiter);
+  app.use('/api/messages', limiter);
+  app.use('/api/conversations', limiter);
+  console.log('Rate limiting activé (production)');
+} else {
+  console.log('Rate limiting désactivé en développement');
+}
 
 // Connexion à la base de données
 console.log('Connexion à la base de données...');

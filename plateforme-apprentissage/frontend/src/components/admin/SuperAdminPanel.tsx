@@ -434,26 +434,8 @@ const SuperAdminPanel: React.FC = () => {
             </Card>
           </Grid>
 
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography color="textSecondary" gutterBottom>
-                      Posts Communauté
-                    </Typography>
-                    <Typography variant="h4">
-                      {systemStats.community.posts}
-                    </Typography>
-                    <Typography variant="body2" color="info.main">
-                      {systemStats.community.likes} likes
-                    </Typography>
-                  </Box>
-                  <Forum fontSize="large" color="info" />
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
+          {/* Carte de statistiques Communauté masquée pour l'admin */}
+          {/* (Supprimé car non prioritaire pour l'admin) */}
 
           <Grid item xs={12} sm={6} md={3}>
             <Card>
@@ -529,7 +511,8 @@ const SuperAdminPanel: React.FC = () => {
             <Tab icon={<People />} label="Utilisateurs" />
             <Tab icon={<School />} label="Cours & Badges" />
             <Tab icon={<Work />} label="Emplois" />
-            <Tab icon={<Forum />} label="Communauté" />
+            {/* Masquer l'onglet Communauté tout en conservant l'indexation */}
+            <Tab icon={<Forum />} label="Communauté" disabled sx={{ display: 'none' }} />
             <Tab icon={<Security />} label="Modération" />
             <Tab icon={<Settings />} label="Système" />
           </Tabs>
@@ -781,60 +764,9 @@ const SuperAdminPanel: React.FC = () => {
             </Box>
           )}
 
-          {/* Onglet Communauté */}
-          {activeTab === 3 && (
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Modération de la Communauté
-              </Typography>
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Auteur</TableCell>
-                      <TableCell>Contenu</TableCell>
-                      <TableCell>Likes</TableCell>
-                      <TableCell>Date</TableCell>
-                      <TableCell>Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {posts.map((post) => (
-                      <TableRow key={post._id}>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                            <Avatar
-                              src={post.auteur.photoProfil ? `http://localhost:5006/uploads/profiles/${post.auteur.photoProfil}` : undefined}
-                              sx={{ width: 32, height: 32 }}
-                            >
-                              {post.auteur.nom.charAt(0)}
-                            </Avatar>
-                            {post.auteur.nom}
-                          </Box>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                            {post.contenu}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>{post.likes.length}</TableCell>
-                        <TableCell>
-                          {new Date(post.dateCreation).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          <IconButton
-                            onClick={() => deletePost(post._id)}
-                            color="error"
-                          >
-                            <Delete />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
+          {/* Onglet Communauté masqué (non utilisé par l'admin) */}
+          {false && activeTab === 3 && (
+            <Box />
           )}
 
           {/* Onglet Modération */}

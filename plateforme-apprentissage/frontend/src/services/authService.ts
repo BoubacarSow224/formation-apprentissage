@@ -128,4 +128,17 @@ export const authService = {
       );
     }
   }
+  ,
+
+  async logout(): Promise<void> {
+    try {
+      const response = await api.post('/auth/logout');
+      if (!response.data?.success) {
+        console.warn('Réponse de déconnexion non réussie:', response.data);
+      }
+    } catch (error: any) {
+      // Ne pas bloquer la déconnexion locale si l'appel échoue
+      console.error('Erreur lors de la déconnexion côté serveur:', error);
+    }
+  }
 };

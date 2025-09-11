@@ -1,5 +1,5 @@
+require('dotenv').config();
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 const User = require('./models/User');
 
 // Configuration de la base de données
@@ -12,7 +12,7 @@ const createSuperAdmin = async () => {
     console.log('✅ Connexion à MongoDB réussie');
 
     // Vérifier si un super admin existe déjà
-    const existingSuperAdmin = await User.findOne({ role: 'admin' });
+    const existingSuperAdmin = await User.findOne({ role: 'admin', email: 'admin@plateforme.com' });
     if (existingSuperAdmin) {
       console.log('⚠️  Un administrateur existe déjà:', existingSuperAdmin.email);
       console.log('📧 Email:', existingSuperAdmin.email);
@@ -22,9 +22,9 @@ const createSuperAdmin = async () => {
       // Proposer de réinitialiser le mot de passe
       console.log('\n🔄 Réinitialisation du mot de passe...');
       const newPassword = 'SuperAdmin2024!';
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
-      
-      existingSuperAdmin.motDePasse = hashedPassword;
+      // IMPORTANT: définir en clair et laisser le hook pre('save') hasher
+      existingSuperAdmin.password = newPassword;
+      existingSuperAdmin.estActif = true;
       await existingSuperAdmin.save();
       
       console.log('✅ Mot de passe réinitialisé avec succès !');
@@ -37,16 +37,13 @@ const createSuperAdmin = async () => {
     }
 
     // Créer un nouveau super administrateur
-    const plainPassword = 'SuperAdmin2024!';
-    const hashedPassword = await bcrypt.hash(plainPassword, 12);
-    
     const superAdminData = {
       nom: 'Super Administrateur',
       email: 'admin@plateforme.com',
       telephone: '+221771234567',
-      motDePasse: hashedPassword,
+      password: 'SuperAdmin2024!',
       role: 'admin',
-      actif: true,
+      estActif: true,
       bio: 'Super Administrateur de la plateforme d\'apprentissage avec tous les privilèges.',
       competences: ['Administration', 'Gestion', 'Modération', 'Analytics'],
       langues: ['Français', 'Anglais'],
@@ -97,9 +94,9 @@ const createTestUsers = async () => {
       {
         nom: 'Formateur Test',
         email: 'formateur@test.com',
-        motDePasse: 'Test123!',
+        password: 'Test123!',
         role: 'formateur',
-        actif: true,
+        estActif: true,
         telephone: '+221771111111',
         bio: 'Formateur de test pour la plateforme',
         competences: ['Enseignement', 'Pédagogie'],
@@ -108,9 +105,9 @@ const createTestUsers = async () => {
       {
         nom: 'Apprenant Test',
         email: 'apprenant@test.com',
-        motDePasse: 'Test123!',
+        password: 'Test123!',
         role: 'apprenant',
-        actif: true,
+        estActif: true,
         telephone: '+221772222222',
         bio: 'Apprenant de test pour la plateforme',
         competences: ['Apprentissage'],
@@ -121,8 +118,6 @@ const createTestUsers = async () => {
     for (const userData of testUsers) {
       const existingUser = await User.findOne({ email: userData.email });
       if (!existingUser) {
-        const salt = await bcrypt.genSalt(12);
-        userData.motDePasse = await bcrypt.hash(userData.motDePasse, salt);
         userData.dateInscription = new Date();
         userData.photoProfil = 'default.jpg';
         

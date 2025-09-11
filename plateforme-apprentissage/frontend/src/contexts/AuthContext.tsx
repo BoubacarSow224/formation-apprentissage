@@ -114,11 +114,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    // Redirection vers la page d'accueil après déconnexion
-    window.location.href = '/';
+  const logout = async () => {
+    try {
+      await authService.logout();
+    } catch (e) {
+      // On continue quand même la déconnexion locale
+      console.error('Erreur logout serveur, poursuite de la déconnexion locale', e);
+    } finally {
+      localStorage.removeItem('token');
+      setUser(null);
+      // Redirection vers la page d'accueil après déconnexion
+      window.location.href = '/';
+    }
   };
 
   const updateUser = (updatedUser: User) => {

@@ -11,13 +11,27 @@ exports.getTousLesCours = asyncHandler(async (req, res, next) => {
   res.status(200).json(res.advancedResults);
 });
 
+// @desc    Récupérer les cours publics (approuvés & publiés)
+// @route   GET /api/cours/public
+// @access  Public
+exports.getCoursPublics = asyncHandler(async (req, res, next) => {
+  const cours = await Cours.find({ estApprouve: true, estPublic: true })
+    .sort('-createdAt')
+    .populate('formateur', 'nom photoProfil');
+
+  res.status(200).json({
+    success: true,
+    count: cours.length,
+    data: cours
+  });
+});
+
 // @desc    Récupérer un seul cours
 // @route   GET /api/cours/:id
 // @access  Public
 exports.getCours = asyncHandler(async (req, res, next) => {
   const cours = await Cours.findById(req.params.id)
-    .populate('formateur', 'nom photoProfil')
-    .populate('badge');
+    .populate('formateur', 'nom photoProfil');
 
   if (!cours) {
     return next(
@@ -29,6 +43,52 @@ exports.getCours = asyncHandler(async (req, res, next) => {
     success: true,
     data: cours
   });
+});
+
+// @desc    Publier un cours (Formateur/Admin) - nécessite estApprouve = true
+// @route   PUT /api/cours/:id/publier
+// @access  Privé (Formateur/Admin)
+exports.publierCours = asyncHandler(async (req, res, next) => {
+  const cours = await Cours.findById(req.params.id);
+
+  if (!cours) {
+    return next(new ErrorResponse(`Cours non trouvé avec l'ID ${req.params.id}`, 404));
+  }
+
+  // Autorisation: propriétaire ou admin
+  if (cours.formateur.toString() !== req.user.id && req.user.role !== 'admin') {
+    return next(new ErrorResponse('Accès refusé', 403));
+  }
+
+  if (!cours.estApprouve) {
+    return next(new ErrorResponse('Le cours doit être approuvé avant publication', 400));
+  }
+
+  cours.estPublic = true;
+  await cours.save();
+
+  res.status(200).json({ success: true, data: cours });
+});
+
+// @desc    Dépublier un cours (Formateur/Admin)
+// @route   PUT /api/cours/:id/depublier
+// @access  Privé (Formateur/Admin)
+exports.depublierCours = asyncHandler(async (req, res, next) => {
+  const cours = await Cours.findById(req.params.id);
+
+  if (!cours) {
+    return next(new ErrorResponse(`Cours non trouvé avec l'ID ${req.params.id}`, 404));
+  }
+
+  // Autorisation: propriétaire ou admin
+  if (cours.formateur.toString() !== req.user.id && req.user.role !== 'admin') {
+    return next(new ErrorResponse('Accès refusé', 403));
+  }
+
+  cours.estPublic = false;
+  await cours.save();
+
+  res.status(200).json({ success: true, data: cours });
 });
 
 // @desc    Créer un cours
@@ -170,11 +230,11 @@ exports.inscriptionCours = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Vérifier si le cours est approuvé
-  if (!cours.estApprouve) {
+  // Vérifier si le cours est approuvé et publié
+  if (!cours.estApprouve || !cours.estPublic) {
     return next(
       new ErrorResponse(
-        'Impossible de s\'inscrire à un cours non approuvé',
+        'Impossible de s\'inscrire à un cours non disponible (non approuvé ou non publié)',
         400
       )
     );

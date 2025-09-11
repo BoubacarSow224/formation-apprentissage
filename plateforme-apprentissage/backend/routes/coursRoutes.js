@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getTousLesCours,
   getCours,
+  getCoursPublics,
   createCours,
   updateCours,
   deleteCours,
@@ -12,14 +13,17 @@ const {
   approuverCours,
   getStatistiquesFormateur,
   getCoursRecentsFormateur,
-  getEtudiantsRecentsFormateur
+  getEtudiantsRecentsFormateur,
+  publierCours,
+  depublierCours
 } = require('../controllers/coursController');
 const { protect, authorize } = require('../middleware/auth');
 const advancedResults = require('../middleware/advancedResults');
 const Cours = require('../models/Cours');
 
 // Routes publiques
-router.get('/', advancedResults(Cours, 'formateur badge'), getTousLesCours);
+router.get('/', advancedResults(Cours, 'formateur'), getTousLesCours);
+router.get('/public', getCoursPublics);
 router.get('/:id', getCours);
 router.get('/formateur/:id', getCoursParFormateur);
 
@@ -111,6 +115,8 @@ router.get('/formateur/etudiants-recents', authorize('formateur'), async (req, r
 router.post('/', authorize('formateur', 'admin'), createCours);
 router.put('/:id', authorize('formateur', 'admin'), updateCours);
 router.delete('/:id', authorize('formateur', 'admin'), deleteCours);
+router.put('/:id/publier', authorize('formateur', 'admin'), publierCours);
+router.put('/:id/depublier', authorize('formateur', 'admin'), depublierCours);
 
 // Routes pour les administrateurs
 router.put('/:id/approuver', authorize('admin'), approuverCours);

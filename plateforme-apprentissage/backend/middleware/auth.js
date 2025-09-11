@@ -28,6 +28,15 @@ exports.protect = async (req, res, next) => {
         });
       }
 
+      // Mettre à jour le statut en ligne et la dernière activité
+      try {
+        await User.findByIdAndUpdate(decoded.id, {
+          $set: { enLigne: true, derniereActiviteAt: new Date() }
+        });
+      } catch (e) {
+        console.error('Erreur lors de la mise à jour du statut en ligne:', e);
+      }
+
       next();
     } catch (error) {
       console.error('Erreur d\'authentification:', error);

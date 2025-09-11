@@ -16,6 +16,13 @@ const postSchema = new mongoose.Schema({
     required: true
   },
   
+  // Groupe (optionnel) pour posts de groupe
+  group: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Group',
+    default: null
+  },
+  
   // Interactions
   likes: [{
     user: {
@@ -73,6 +80,7 @@ const postSchema = new mongoose.Schema({
 postSchema.index({ author: 1, dateCreation: -1 });
 postSchema.index({ dateCreation: -1 });
 postSchema.index({ tags: 1 });
+postSchema.index({ group: 1, dateCreation: -1 });
 
 // Middleware pour mettre à jour dateModification
 postSchema.pre('save', function(next) {
