@@ -27,6 +27,29 @@ const Navbar: React.FC = () => {
     setAnchorEl(null);
   };
 
+  const goToDashboard = () => {
+    if (!user) {
+      navigate('/');
+      return;
+    }
+    switch (user.role) {
+      case 'admin':
+        navigate('/admin');
+        break;
+      case 'formateur':
+        navigate('/formateur');
+        break;
+      case 'apprenant':
+        navigate('/apprenant');
+        break;
+      case 'entreprise':
+        navigate('/entreprise');
+        break;
+      default:
+        navigate('/dashboard');
+    }
+  };
+
   const handleLogout = () => {
     logout();
     navigate('/');
@@ -37,27 +60,51 @@ const Navbar: React.FC = () => {
     <AppBar position="fixed">
       <Toolbar>
         <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <span onClick={goToDashboard} style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}>
             Plateforme d'Apprentissage
-          </Link>
+          </span>
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button color="inherit" component={Link} to="/courses">
             Cours
           </Button>
-          <Button color="inherit" component={Link} to="/community">
-            Communauté
-          </Button>
+          {user && (user.role === 'formateur' || user.role === 'apprenant') && (
+            <Button color="inherit" component={Link} to="/community">
+              Communauté
+            </Button>
+          )}
           <Button color="inherit" component={Link} to="/jobs">
             Emplois
           </Button>
+          {user && user.role !== 'apprenant' && user.role !== 'admin' && (
+            <Button color="inherit" component={Link} to="/groupes">
+              Groupes
+            </Button>
+          )}
           
           {user ? (
             <>
-              <Button color="inherit" component={Link} to="/dashboard">
-                Dashboard
-              </Button>
+              {user.role === 'formateur' && (
+                <>
+                  <Button color="inherit" component={Link} to="/formateur">
+                    Formateur
+                  </Button>
+                  <Button color="inherit" component={Link} to="/formateur/cours/nouveau">
+                    Créer un cours
+                  </Button>
+                </>
+              )}
+              {user.role === 'apprenant' && (
+                <Button color="inherit" component={Link} to="/apprenant">
+                  Apprenant
+                </Button>
+              )}
+              {user.role === 'entreprise' && (
+                <Button color="inherit" component={Link} to="/entreprise">
+                  Entreprise
+                </Button>
+              )}
               {user.role === 'admin' && (
                 <Button color="inherit" component={Link} to="/admin">
                   Admin

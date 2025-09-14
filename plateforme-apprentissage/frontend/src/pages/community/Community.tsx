@@ -16,8 +16,10 @@ import {
   ListItemAvatar,
   ListItemText,
   Tab,
-  Tabs
+  Tabs,
+  CircularProgress
 } from '@mui/material';
+import Badge from '@mui/material/Badge';
 import { 
   Send, 
   ThumbUp, 
@@ -29,6 +31,8 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../services/api';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { groupeService } from '../../services/groupeService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -53,6 +57,8 @@ function TabPanel(props: TabPanelProps) {
 
 const Community: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [tabValue, setTabValue] = useState(0);
   const [newPost, setNewPost] = useState('');
   const [posts, setPosts] = useState<any[]>([]);
@@ -82,6 +88,9 @@ const Community: React.FC = () => {
   const [groupPostInputs, setGroupPostInputs] = useState<Record<string, string>>({});
   const [groupCommentInputs, setGroupCommentInputs] = useState<Record<string, Record<string, string>>>({});
   const [loadingGroupPosts, setLoadingGroupPosts] = useState<Record<string, boolean>>({});
+  // Invitations (groupes académiques)
+  const [myInvites, setMyInvites] = useState<any[]>([]);
+  const [loadingInvites, setLoadingInvites] = useState(false);
 
   const fetchCommunityData = async () => {
     try {
@@ -209,6 +218,30 @@ const Community: React.FC = () => {
     }
   };
 
+  // ================= Invitations de groupes (apprenant) =================
+  const fetchMyInvites = async () => {
+    if (!user) return;
+    setLoadingInvites(true);
+    try {
+      const res = await groupeService.getMesInvitations();
+      const list = res.data || res;
+      setMyInvites(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setMyInvites([]);
+    } finally {
+      setLoadingInvites(false);
+    }
+  };
+
+  const respondInvite = async (groupeId: string, invitationId: string, action: 'accepte' | 'refuse') => {
+    try {
+      await groupeService.repondreInvitation(groupeId, invitationId, action);
+      await fetchMyInvites();
+    } catch (e) {
+      // noop (les erreurs seront visibles côté backend si besoin)
+    }
+  };
+
   const handleInviteChange = (groupId: string, value: string) => {
     setInviteInputs(prev => ({ ...prev, [groupId]: value }));
   };
@@ -271,15 +304,49 @@ const Community: React.FC = () => {
 
   useEffect(() => {
     fetchCommunityData();
+    // Charger les invitations dès l'arrivée sur la page
+    fetchMyInvites();
     const interval = setInterval(() => {
       fetchCommunityData();
+      // Mettre à jour le badge des invitations même si l'onglet n'est pas actif
+      if (user && (user as any)?.role === 'apprenant') {
+        fetchMyInvites();
+      }
     }, 5000); // rafraîchissement toutes les 5s pour visibilité quasi temps réel
     return () => clearInterval(interval);
   }, []);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+    let tabParam = 'feed';
+    if (newValue === 1) tabParam = 'discussions';
+    // Si l'onglet invitations est présent, il est à l'index 2
+    if (newValue === 2 && user && (user as any)?.role === 'apprenant') tabParam = 'invites';
+    const url = `/community?tab=${tabParam}`;
+    if (location.search !== `?tab=${tabParam}`) navigate(url, { replace: false });
+    if (tabParam === 'invites') fetchMyInvites();
   };
+
+  // Synchroniser l'onglet avec le paramètre de requête ?tab=
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    if (tab === 'discussions' && tabValue !== 1) setTabValue(1);
+    else if (tab === 'invites' && user && (user as any)?.role === 'apprenant' && tabValue !== 2) {
+      setTabValue(2);
+      fetchMyInvites();
+    }
+    else if ((tab === 'feed' || tab === 'groups' || tab === null) && tabValue !== 0) setTabValue(0);
+  }, [location.search]);
+
+  // Rafraîchir les invitations lorsque l'onglet "Mes invitations" est actif
+  useEffect(() => {
+    if (tabValue === 2 && user && (user as any)?.role === 'apprenant') {
+      fetchMyInvites();
+      const invInterval = setInterval(fetchMyInvites, 15000);
+      return () => clearInterval(invInterval);
+    }
+  }, [tabValue, user]);
 
   const handlePostSubmit = async () => {
     if (!newPost.trim() || !user) return;
@@ -519,7 +586,12 @@ const Community: React.FC = () => {
         <Tabs value={tabValue} onChange={handleTabChange}>
           <Tab label="Fil d'actualité" icon={<TrendingUp />} />
           <Tab label="Discussions" icon={<Forum />} />
-          <Tab label="Groupes" icon={<Group />} />
+          {user && (user as any)?.role === 'apprenant' && (
+            <Tab
+              label={<Badge color="error" badgeContent={myInvites.length || 0} invisible={!myInvites.length}>Mes invitations</Badge>}
+              icon={<Group />}
+            />
+          )}
         </Tabs>
       </Box>
 
@@ -672,6 +744,8 @@ const Community: React.FC = () => {
                 ) : null}
               </CardContent>
             </Card>
+
+            
           </Grid>
         </Grid>
       </TabPanel>

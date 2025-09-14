@@ -75,19 +75,25 @@ export const coursService = {
     return response.data;
   },
 
+  async getCoursPublics(): Promise<Cours[]> {
+    const response = await api.get('/cours/public');
+    // Backend returns { success, count, data }
+    return response.data?.data ?? response.data ?? [];
+  },
+
   async getCoursById(id: string): Promise<Cours> {
     const response = await api.get(`/cours/${id}`);
-    return response.data;
+    return (response.data?.data ?? response.data) as Cours;
   },
 
   async createCours(coursData: Partial<Cours>): Promise<Cours> {
     const response = await api.post('/cours', coursData);
-    return response.data;
+    return (response.data?.data ?? response.data) as Cours;
   },
 
   async updateCours(id: string, coursData: Partial<Cours>): Promise<Cours> {
     const response = await api.put(`/cours/${id}`, coursData);
-    return response.data;
+    return (response.data?.data ?? response.data) as Cours;
   },
 
   async deleteCours(id: string): Promise<void> {
@@ -96,7 +102,7 @@ export const coursService = {
 
   async dupliquerCours(id: string, nouveauTitre: string): Promise<Cours> {
     const response = await api.post(`/cours/${id}/dupliquer`, { titre: nouveauTitre });
-    return response.data;
+    return (response.data?.data ?? response.data) as Cours;
   },
 
   // Inscription et gestion des étudiants
@@ -142,9 +148,35 @@ export const coursService = {
     return response.data;
   },
 
+  // Nouveau: progression apprenant alignée avec le backend actuel
+  async demarrerCours(coursId: string): Promise<void> {
+    await api.post(`/cours/${coursId}/demarrer`);
+  },
+
+  async terminerEtape(coursId: string, index: number): Promise<{ success: boolean; data: any }> {
+    const response = await api.patch(`/cours/${coursId}/etapes/${index}/terminer`);
+    return response.data;
+  },
+
+  async terminerCours(coursId: string): Promise<{ success: boolean; data: any }> {
+    const response = await api.patch(`/cours/${coursId}/terminer`);
+    return response.data;
+  },
+
   async genererCertificat(coursId: string): Promise<string> {
     const response = await api.post(`/cours/${coursId}/certificat`);
     return response.data.certificatUrl;
+  },
+
+  // Nouveau: actions formateur/admin
+  async attribuerBadge(coursId: string, apprenantId: string, badgeId: string): Promise<any> {
+    const response = await api.post(`/cours/${coursId}/attribuer-badge`, { apprenantId, badgeId });
+    return response.data;
+  },
+
+  async delivrerCertificat(coursId: string, payload: { apprenantId: string; noteFinale?: number; competencesValidees?: Array<{ nom: string; niveau: 'debutant' | 'intermediaire' | 'avance' | 'expert' }>; }): Promise<any> {
+    const response = await api.post(`/cours/${coursId}/delivrer-certificat`, payload);
+    return response.data;
   },
 
   // Modules et contenu
@@ -262,6 +294,12 @@ export const coursService = {
     return response.data;
   },
 
+  // Formateur: cours et élèves
+  async getCoursParFormateur(formateurId: string): Promise<Cours[]> {
+    const response = await api.get(`/cours/formateur/${formateurId}`);
+    return response.data?.data ?? response.data;
+  },
+
   // Statistiques
   async getStatistiquesCours(coursId?: string): Promise<any> {
     const endpoint = coursId ? `/cours/${coursId}/statistiques` : '/cours/mes-statistiques';
@@ -281,6 +319,21 @@ export const coursService = {
 
   async getEtudiantsRecentsFormateur(): Promise<any[]> {
     const response = await api.get('/cours/formateur/etudiants-recents');
+    return response.data;
+  },
+
+  async getMesCoursFormateur(): Promise<any[]> {
+    const response = await api.get('/cours/formateur/mes-cours');
+    return response.data?.data ?? response.data ?? [];
+  },
+
+  async publierCours(coursId: string): Promise<any> {
+    const response = await api.put(`/cours/${coursId}/publier`);
+    return response.data;
+  },
+
+  async depublierCours(coursId: string): Promise<any> {
+    const response = await api.put(`/cours/${coursId}/depublier`);
     return response.data;
   },
 
@@ -382,5 +435,31 @@ export const coursService = {
 
   async marquerNotificationLue(notificationId: string): Promise<void> {
     await api.put(`/cours/notifications/${notificationId}/lu`);
+  },
+
+  // Formateur: suivi élèves et badges
+  async getElevesCours(coursId: string): Promise<{ success: boolean; count: number; data: any[] }> {
+    const response = await api.get(`/cours/${coursId}/eleves`);
+    return response.data;
+  },
+
+  async getProgressionEleve(coursId: string, apprenantId: string): Promise<{ success: boolean; data: any }> {
+    const response = await api.get(`/cours/${coursId}/eleves/${apprenantId}`);
+    return response.data;
+  },
+
+  async getHistoriqueBadges(coursId: string): Promise<{ success: boolean; count: number; data: any[] }> {
+    const response = await api.get(`/cours/${coursId}/historique-badges`);
+    return response.data;
+  },
+
+  async getBadgesCours(coursId: string): Promise<{ success: boolean; count: number; data: Array<{ _id: string; nom: string; description: string; image: string; niveau: string }> }> {
+    const response = await api.get(`/cours/${coursId}/badges`);
+    return response.data;
+  },
+
+  async getCertificatEleve(coursId: string, apprenantId: string): Promise<{ success: boolean; data?: any; message?: string }> {
+    const response = await api.get(`/cours/${coursId}/certificat`, { params: { apprenantId } });
+    return response.data;
   }
 };

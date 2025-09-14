@@ -5,6 +5,8 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5006/api
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000, // 10 secondes de timeout
+  // Fournir un message d'erreur de timeout plus clair côté front
+  timeoutErrorMessage: "Le serveur met trop de temps à répondre. Veuillez réessayer plus tard.",
   headers: {
     'Content-Type': 'application/json',
   },
@@ -28,16 +30,31 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('Erreur API:', error);
-    
-    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK') {
-      console.error('Serveur backend non accessible sur:', API_BASE_URL);
+    // Normaliser les erreurs réseau/timeout avec un message propre
+    const status = error?.response?.status;
+    const code = error?.code;
+    const requestUrl: string | undefined = error?.config?.url;
+
+    if (status === 401) {
+      // Ne pas éjecter l'utilisateur pour toute 401 générique.
+      // On force la redirection seulement si l'appel touche des endpoints d'auth critiques.
+      const criticalAuthPaths = ['/auth/me', '/auth/profile', '/auth/logout', '/auth/login', '/auth/register'];
+      const isCritical = !!requestUrl && criticalAuthPaths.some(p => requestUrl.includes(p));
+      if (isCritical) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+        return; // stop ici
+      }
+      // Sinon, on propage l'erreur pour laisser la page gérer localement
+      return Promise.reject(error);
     }
-    
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+
+    if (code === 'ECONNABORTED' || code === 'ERR_NETWORK' || code === 'ECONNREFUSED') {
+      const friendly = new Error('Le serveur est indisponible pour le moment. Réessayez plus tard.');
+      return Promise.reject(friendly);
     }
+
+    // Pour les autres erreurs, retourner l'erreur d'origine (sans spam console)
     return Promise.reject(error);
   }
 );

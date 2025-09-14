@@ -29,6 +29,10 @@ const conversationSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  groupe: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Groupe'
+  },
   estGroupe: {
     type: Boolean,
     default: false
@@ -92,6 +96,7 @@ const conversationSchema = new mongoose.Schema({
 conversationSchema.index({ 'participants.utilisateur': 1, dateDernierMessage: -1 });
 conversationSchema.index({ cours: 1 });
 conversationSchema.index({ offreEmploi: 1 });
+conversationSchema.index({ groupe: 1 });
 
 // Middleware pour s'assurer qu'une conversation a au moins 2 participants
 conversationSchema.pre('validate', function(next) {

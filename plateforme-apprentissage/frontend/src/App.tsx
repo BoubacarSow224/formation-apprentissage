@@ -14,7 +14,14 @@ import Community from './pages/community/Community';
 import Jobs from './pages/jobs/Jobs';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import MesGroupes from './pages/groupes/MesGroupes';
+import GroupeDetail from './pages/groupes/GroupeDetail';
 import FormateurDashboard from './pages/FormateurDashboard';
+import CourseStudents from './pages/formateur/CourseStudents';
+import StudentProgress from './pages/formateur/StudentProgress';
+import BadgesHistory from './pages/formateur/BadgesHistory';
+import CreateCourse from './pages/formateur/CreateCourse';
+import EditCourse from './pages/formateur/EditCourse';
 import ApprenantDashboard from './pages/ApprenantDashboard';
 import EntrepriseDashboard from './pages/EntrepriseDashboard';
 import { AuthProvider } from './contexts/AuthContext';
@@ -88,6 +95,31 @@ function App() {
                   <FormateurDashboard />
                 </ProtectedRoute>
               } />
+              <Route path="/formateur/cours/nouveau" element={
+                <ProtectedRoute>
+                  <CreateCourse />
+                </ProtectedRoute>
+              } />
+              <Route path="/formateur/cours/:id/modifier" element={
+                <ProtectedRoute>
+                  <EditCourse />
+                </ProtectedRoute>
+              } />
+              <Route path="/formateur/cours/:id/eleves" element={
+                <ProtectedRoute>
+                  <CourseStudents />
+                </ProtectedRoute>
+              } />
+              <Route path="/formateur/cours/:id/eleves/:apprenantId" element={
+                <ProtectedRoute>
+                  <StudentProgress />
+                </ProtectedRoute>
+              } />
+              <Route path="/formateur/cours/:id/historique-badges" element={
+                <ProtectedRoute>
+                  <BadgesHistory />
+                </ProtectedRoute>
+              } />
               <Route path="/apprenant" element={
                 <ProtectedRoute>
                   <ApprenantDashboard />
@@ -96,6 +128,16 @@ function App() {
               <Route path="/entreprise" element={
                 <ProtectedRoute>
                   <EntrepriseDashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/groupes" element={
+                <ProtectedRoute>
+                  <MesGroupes />
+                </ProtectedRoute>
+              } />
+              <Route path="/groupes/:id" element={
+                <ProtectedRoute>
+                  <GroupeDetail />
                 </ProtectedRoute>
               } />
             </Routes>

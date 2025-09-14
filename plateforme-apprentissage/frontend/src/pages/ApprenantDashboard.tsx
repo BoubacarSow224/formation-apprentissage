@@ -52,7 +52,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 const ApprenantDashboard: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [tabValue, setTabValue] = useState(0);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -93,13 +93,10 @@ const ApprenantDashboard: React.FC = () => {
           <Typography variant="h4" component="h1" gutterBottom>
             Mon Espace d'Apprentissage
           </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
-            Bienvenue, {user?.nom} 👨‍🎓
+          <Typography variant="h3" sx={{ fontWeight: 800, mt: 0.5 }}>
+            Bienvenue, {user?.nom} 👨‍🏫
           </Typography>
         </Box>
-        <Button variant="outlined" onClick={logout}>
-          Déconnexion
-        </Button>
       </Box>
 
       {/* Statistiques */}

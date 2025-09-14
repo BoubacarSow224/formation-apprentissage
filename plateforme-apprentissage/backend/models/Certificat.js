@@ -109,8 +109,7 @@ const certificatSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-// Index pour la recherche et la vérification
-certificatSchema.index({ numeroSerie: 1 });
+// Index pour la recherche et la vérification (numeroSerie déjà unique via le champ)
 certificatSchema.index({ utilisateur: 1, cours: 1 });
 certificatSchema.index({ hashVerification: 1 });
 

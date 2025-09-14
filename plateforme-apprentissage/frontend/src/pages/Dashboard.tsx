@@ -57,8 +57,8 @@ const Dashboard: React.FC = () => {
               {user.nom ? user.nom.charAt(0).toUpperCase() : 'U'}
             </Avatar>
             <Box>
-              <Typography variant="h4" gutterBottom>
-                Bienvenue, {user.nom || 'Utilisateur'}
+              <Typography variant="h3" gutterBottom sx={{ fontWeight: 800 }}>
+                Bienvenue, {user.nom || 'Utilisateur'} 👨‍🏫
               </Typography>
               <Chip 
                 label={user.role || 'Utilisateur'} 

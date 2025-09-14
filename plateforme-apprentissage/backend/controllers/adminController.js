@@ -190,10 +190,10 @@ const getActivityLogs = async (req, res) => {
 
     // Récupérer les cours récemment créés
     const recentCourses = await Cours.find()
-      .sort({ dateCreation: -1 })
+      .sort({ createdAt: -1 })
       .limit(parseInt(limit) / 2)
-      .populate('createur', 'nom')
-      .select('titre createur dateCreation');
+      .populate('formateur', 'nom')
+      .select('titre formateur createdAt');
 
     // Combiner et formater les activités
     const activities = [];
@@ -215,9 +215,9 @@ const getActivityLogs = async (req, res) => {
         id: cours._id,
         type: 'course',
         action: 'Nouveau cours créé',
-        user: cours.createur?.nom || 'Utilisateur inconnu',
+        user: cours.formateur?.nom || 'Utilisateur inconnu',
         target: cours.titre,
-        timestamp: cours.dateCreation,
+        timestamp: cours.createdAt,
         details: { courseId: cours._id }
       });
     });
@@ -505,23 +505,51 @@ const getCourses = async (req, res) => {
       ];
     }
     
-    if (status) {
-      filter.statut = status;
-    }
-    
-    if (creator) {
-      filter.createur = creator;
-    }
-
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const courses = await Cours.find(filter)
-      .populate('createur', 'nom email')
-      .sort({ dateCreation: -1 })
+    // Mapper le filtre 'status' du frontend admin sur le schéma réel
+    if (status) {
+      if (status === 'publie') {
+        filter.estApprouve = true;
+        filter.estPublic = true;
+      } else if (status === 'en_attente') {
+        // Inclure aussi les anciens documents sans champ ou non approuvés
+        filter.$or = [
+          { statutModeration: 'en_attente' },
+          { statutModeration: { $exists: false } },
+          { estApprouve: { $ne: true } }
+        ];
+      } else if (status === 'rejete') {
+        filter.statutModeration = 'rejete';
+      }
+    }
+
+    if (creator) {
+      filter.formateur = creator;
+    }
+
+    console.log('[Admin.getCourses] Query params:', { search, status, creator, page, limit });
+    console.log('[Admin.getCourses] Mongo filter:', JSON.stringify(filter));
+
+    let courses = await Cours.find(filter)
+      .populate('formateur', 'nom email')
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
 
-    const total = await Cours.countDocuments(filter);
+    // Fallback diagnostic: si aucun cours n'est retourné, tenter sans filtre pour vérifier la présence de documents
+    let total = await Cours.countDocuments(filter);
+    if (!Array.isArray(courses) || courses.length === 0) {
+      const diagnostic = await Cours.find({}).sort({ createdAt: -1 }).limit(parseInt(limit)).populate('formateur', 'nom email');
+      console.log('[Admin.getCourses] Diagnostic sample (no filter) count:', diagnostic.length);
+      if (diagnostic.length > 0) {
+        if (status || search || creator) {
+          console.log('[Admin.getCourses] Aucun cours ne correspond aux filtres, retour de la liste sans filtre pour visibilité admin.');
+        }
+        courses = diagnostic;
+        total = await Cours.countDocuments({});
+      }
+    }
     const totalPages = Math.ceil(total / parseInt(limit));
 
     res.json({
@@ -565,14 +593,17 @@ const moderateCourse = async (req, res) => {
 
     if (action === 'approve') {
       course.statutModeration = 'approuve';
-      course.statut = 'publie';
+      course.estApprouve = true; // approuvé côté système
+      course.estPublic = true;   // publication automatique après approbation
     } else if (action === 'reject') {
       course.statutModeration = 'rejete';
       course.raisonRejet = reason;
+      course.estApprouve = false;
+      course.estPublic = false;
     }
 
     course.dateModeration = new Date();
-    course.moderateur = req.user._id;
+    course.moderePar = req.user._id;
     await course.save();
 
     res.json({
@@ -648,7 +679,7 @@ const getPosts = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
     const posts = await Post.find(filter)
-      .populate('auteur', 'nom email photoProfil')
+      .populate('author', 'nom email photoProfil')
       .sort({ dateCreation: -1 })
       .skip(skip)
       .limit(parseInt(limit));

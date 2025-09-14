@@ -172,6 +172,16 @@ const moderationRoutes = require('./routes/moderationRoutes');
 app.use('/api/moderation', moderationRoutes);
 console.log('Route /api/moderation configurée');
 
+console.log('Configuration de la route /api/certificats...');
+const certificatRoutes = require('./routes/certificatRoutes');
+app.use('/api/certificats', certificatRoutes);
+console.log('Route /api/certificats configurée');
+
+console.log('Configuration de la route /api/groupes...');
+const groupeRoutes = require('./routes/groupeRoutes');
+app.use('/api/groupes', groupeRoutes);
+console.log('Route /api/groupes configurée');
+
 // Gestion des erreurs
 console.log('Configuration des gestionnaires d\'erreurs...');
 app.use(notFound); // Gestion des routes non trouvées

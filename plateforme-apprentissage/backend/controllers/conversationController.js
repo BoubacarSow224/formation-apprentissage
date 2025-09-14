@@ -11,6 +11,7 @@ exports.createOrGetConversation = asyncHandler(async (req, res, next) => {
   const { participants } = req.body;
 
   // Vérifier que l'utilisateur actuel fait partie des participants
+  // participants attendu: tableau d'ObjectId utilisateurs
   if (!participants.includes(req.user.id)) {
     participants.push(req.user.id);
   }
@@ -24,10 +25,11 @@ exports.createOrGetConversation = asyncHandler(async (req, res, next) => {
 
   // Vérifier si une conversation existe déjà entre ces participants
   let conversation = await Conversation.findOne({
-    participants: { $all: participants, $size: participants.length }
+    'participants.utilisateur': { $all: participants },
+    $expr: { $eq: [ { $size: '$participants' }, participants.length ] }
   })
-    .populate('participants', 'nom prenom photoProfil role')
-    .populate('lastMessage');
+    .populate('participants.utilisateur', 'nom prenom photoProfil role')
+    .populate('dernierMessage');
 
   // Si aucune conversation n'existe, en créer une nouvelle
   if (!conversation) {
@@ -42,14 +44,14 @@ exports.createOrGetConversation = asyncHandler(async (req, res, next) => {
 
     // Créer une nouvelle conversation
     conversation = await Conversation.create({
-      participants,
-      createdBy: req.user.id
+      participants: participants.map((u) => ({ utilisateur: u })),
+      createur: req.user.id
     });
 
     // Récupérer les détails complets des participants
     conversation = await Conversation.findById(conversation._id)
-      .populate('participants', 'nom prenom photoProfil role')
-      .populate('lastMessage');
+      .populate('participants.utilisateur', 'nom prenom photoProfil role')
+      .populate('dernierMessage');
   }
 
   res.status(200).json({
@@ -63,10 +65,10 @@ exports.createOrGetConversation = asyncHandler(async (req, res, next) => {
 // @access  Privé
 exports.getUserConversations = asyncHandler(async (req, res, next) => {
   const conversations = await Conversation.find({
-    participants: req.user.id
+    'participants.utilisateur': req.user.id
   })
-    .populate('participants', 'nom prenom photoProfil role')
-    .populate('lastMessage')
+    .populate('participants.utilisateur', 'nom prenom photoProfil role')
+    .populate('dernierMessage')
     .sort('-updatedAt');
 
   res.status(200).json({
@@ -82,10 +84,10 @@ exports.getUserConversations = asyncHandler(async (req, res, next) => {
 exports.getConversation = asyncHandler(async (req, res, next) => {
   const conversation = await Conversation.findOne({
     _id: req.params.id,
-    participants: req.user.id
+    'participants.utilisateur': req.user.id
   })
-    .populate('participants', 'nom prenom photoProfil role')
-    .populate('lastMessage');
+    .populate('participants.utilisateur', 'nom prenom photoProfil role')
+    .populate('dernierMessage');
 
   if (!conversation) {
     return next(
@@ -100,14 +102,14 @@ exports.getConversation = asyncHandler(async (req, res, next) => {
   await Message.updateMany(
     {
       conversation: conversation._id,
-      recipient: req.user.id,
+      destinataire: req.user.id,
       lu: false
     },
     { $set: { lu: true, dateLecture: Date.now() } }
   );
 
   // Mettre à jour le nombre de messages non lus dans la conversation
-  conversation.nonLu = 0;
+  conversation.messagesNonLus = 0;
   await conversation.save();
 
   res.status(200).json({
@@ -138,13 +140,13 @@ exports.updateConversation = asyncHandler(async (req, res, next) => {
   const conversation = await Conversation.findOneAndUpdate(
     {
       _id: req.params.id,
-      participants: req.user.id
+      'participants.utilisateur': req.user.id
     },
     { $set: updateFields },
     { new: true, runValidators: true }
   )
-    .populate('participants', 'nom prenom photoProfil role')
-    .populate('lastMessage');
+    .populate('participants.utilisateur', 'nom prenom photoProfil role')
+    .populate('dernierMessage');
 
   if (!conversation) {
     return next(
@@ -167,7 +169,7 @@ exports.updateConversation = asyncHandler(async (req, res, next) => {
 exports.deleteConversation = asyncHandler(async (req, res, next) => {
   const conversation = await Conversation.findOne({
     _id: req.params.id,
-    participants: req.user.id
+    'participants.utilisateur': req.user.id
   });
 
   if (!conversation) {

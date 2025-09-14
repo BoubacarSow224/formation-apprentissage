@@ -40,7 +40,7 @@ router.post('/discussions', protect, createDiscussion);
 router.post('/discussions/:discussionId/replies', protect, addDiscussionReply);
 
 // Routes pour les groupes
-router.get('/groups', getGroups);
+router.get('/groups', protect, getGroups);
 router.post('/groups', protect, createGroup);
 router.post('/groups/:groupId/join', protect, joinGroup);
 router.post('/groups/:groupId/leave', protect, leaveGroup);

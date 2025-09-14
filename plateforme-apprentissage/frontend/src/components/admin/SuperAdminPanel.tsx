@@ -24,6 +24,7 @@ import {
   TextField,
   MenuItem,
   Alert,
+  Snackbar,
   LinearProgress,
   Divider,
   Badge,
@@ -106,14 +107,20 @@ interface User {
 interface Course {
   _id: string;
   titre: string;
-  description: string;
-  statut: string;
-  statutModeration: string;
-  createur: {
-    nom: string;
-    email: string;
+  description?: string;
+  // champs backend réels
+  statutModeration?: string;
+  estApprouve?: boolean;
+  estPublic?: boolean;
+  formateur?: {
+    nom?: string;
+    email?: string;
   };
-  dateCreation: string;
+  createdAt?: string;
+  // compat legacy éventuelle
+  statut?: string;
+  dateCreation?: string;
+  createur?: { nom?: string; email?: string };
 }
 
 interface Post {
@@ -144,6 +151,9 @@ const SuperAdminPanel: React.FC = () => {
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [moderationAction, setModerationAction] = useState<'approve' | 'reject'>('approve');
   const [moderationReason, setModerationReason] = useState('');
+  const [snack, setSnack] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>(
+    { open: false, message: '', severity: 'success' }
+  );
   const [createAdminData, setCreateAdminData] = useState({
     nom: '',
     email: '',
@@ -193,15 +203,27 @@ const SuperAdminPanel: React.FC = () => {
   // Charger les cours
   const loadCourses = async () => {
     try {
-      const response = await fetch('http://localhost:5006/api/admin/courses?limit=50', {
+      // Par défaut, afficher les cours en attente d'approbation
+      let response = await fetch('http://localhost:5006/api/admin/courses?status=en_attente&limit=50', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
       
       if (response.ok) {
-        const data = await response.json();
-        setCourses(data.data.courses);
+        let data = await response.json();
+        let list = data?.data?.courses ?? [];
+        // Fallback: si aucun cours en attente, charger tous les cours
+        if (!Array.isArray(list) || list.length === 0) {
+          response = await fetch('http://localhost:5006/api/admin/courses?limit=50', {
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (response.ok) {
+            data = await response.json();
+            list = data?.data?.courses ?? [];
+          }
+        }
+        setCourses(Array.isArray(list) ? list : []);
       }
     } catch (error) {
       console.error('Erreur lors du chargement des cours:', error);
@@ -265,6 +287,12 @@ const SuperAdminPanel: React.FC = () => {
         setModerationDialogOpen(false);
         setSelectedCourse(null);
         setModerationReason('');
+        // Notification claire
+        if (moderationAction === 'approve') {
+          setSnack({ open: true, message: 'Cours approuvé et publié automatiquement', severity: 'success' });
+        } else {
+          setSnack({ open: true, message: 'Cours rejeté', severity: 'error' });
+        }
         loadCourses(); // Recharger la liste
       }
     } catch (error) {
@@ -383,6 +411,9 @@ const SuperAdminPanel: React.FC = () => {
           <SupervisorAccount fontSize="large" color="primary" />
           Panneau Super Admin
           <Chip label="Contrôle Total" color="error" variant="outlined" />
+        </Typography>
+        <Typography variant="h3" sx={{ fontWeight: 800, mt: 0.5 }}>
+          Bienvenue, {user?.nom} 👨‍🏫
         </Typography>
         <Typography variant="body1" color="text.secondary">
           Contrôlez tous les aspects de la plateforme d'apprentissage
@@ -606,6 +637,15 @@ const SuperAdminPanel: React.FC = () => {
                         </TableCell>
                       </TableRow>
                     ))}
+                    {courses.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center">
+                          <Typography variant="body2" color="text.secondary">
+                            Aucun cours trouvé. Essayez de rafraîchir ou de réinitialiser les filtres.
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -652,52 +692,65 @@ const SuperAdminPanel: React.FC = () => {
                     {courses.map((course) => (
                       <TableRow key={course._id}>
                         <TableCell>{course.titre}</TableCell>
-                        <TableCell>{course.createur?.nom}</TableCell>
+                        <TableCell>{course.formateur?.nom || course.createur?.nom || '—'}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const isApproved = !!course.estApprouve;
+                            const isPublic = !!course.estPublic;
+                            const statut = isApproved ? (isPublic ? 'publie' : 'approuve') : 'en_attente';
+                            return (
+                              <Chip
+                                label={statut}
+                                color={getStatusColor(statut) as any}
+                                size="small"
+                              />
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <Chip
-                            label={course.statut}
-                            color={getStatusColor(course.statut) as any}
+                            label={course.statutModeration || 'en_attente'}
+                            color={getStatusColor(course.statutModeration || 'en_attente') as any}
                             size="small"
                           />
                         </TableCell>
                         <TableCell>
-                          <Chip
-                            label={course.statutModeration || 'Non défini'}
-                            color={getStatusColor(course.statutModeration) as any}
-                            size="small"
-                          />
+                          {new Date(course.createdAt || course.dateCreation || Date.now()).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          {new Date(course.dateCreation).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          {course.statutModeration === 'en_attente' && (
+                          {(course.statutModeration === 'en_attente' || course.estApprouve !== true) && (
                             <>
-                              <IconButton
-                                onClick={() => {
-                                  setSelectedCourse(course);
-                                  setModerationAction('approve');
-                                  setModerationDialogOpen(true);
-                                }}
-                                color="success"
-                              >
-                                <CheckCircle />
-                              </IconButton>
-                              <IconButton
-                                onClick={() => {
-                                  setSelectedCourse(course);
-                                  setModerationAction('reject');
-                                  setModerationDialogOpen(true);
-                                }}
-                                color="error"
-                              >
-                                <Cancel />
-                              </IconButton>
+                              <Tooltip title="Approuver le cours">
+                                <IconButton
+                                  onClick={() => {
+                                    setSelectedCourse(course);
+                                    setModerationAction('approve');
+                                    setModerationDialogOpen(true);
+                                  }}
+                                  color="success"
+                                >
+                                  <CheckCircle />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Rejeter le cours">
+                                <IconButton
+                                  onClick={() => {
+                                    setSelectedCourse(course);
+                                    setModerationAction('reject');
+                                    setModerationDialogOpen(true);
+                                  }}
+                                  color="error"
+                                >
+                                  <Cancel />
+                                </IconButton>
+                              </Tooltip>
                             </>
                           )}
-                          <IconButton>
-                            <Visibility />
-                          </IconButton>
+                          <Tooltip title="Voir le cours">
+                            <IconButton>
+                              <Visibility />
+                            </IconButton>
+                          </Tooltip>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -938,6 +991,18 @@ const SuperAdminPanel: React.FC = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Snackbar de notification d'action admin */}
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={3000}
+        onClose={() => setSnack(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnack(prev => ({ ...prev, open: false }))} severity={snack.severity} sx={{ width: '100%' }}>
+          {snack.message}
+        </Alert>
+      </Snackbar>
 
       {/* Dialog de création/modification d'utilisateur */}
       <Dialog open={userDialogOpen} onClose={() => setUserDialogOpen(false)} maxWidth="sm" fullWidth>

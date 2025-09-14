@@ -207,11 +207,22 @@ exports.createGroup = async (req, res) => {
   }
 };
 
-// Lister les groupes
+// Lister les groupes (visibilité restreinte aux membres et au propriétaire)
 exports.getGroups = async (req, res) => {
   try {
     const { page = 1, limit = 12, search, tag } = req.query;
-    const query = { isActive: true };
+    const uid = req.user?.id?.toString();
+    if (!uid) return res.status(401).json({ success: false, message: 'Authentification requise' });
+
+    // Un groupe n'est visible que si l'utilisateur est propriétaire (owner) ou membre
+    const query = {
+      isActive: true,
+      $or: [
+        { owner: uid },
+        { members: uid }
+      ]
+    };
+
     if (search) query.name = { $regex: search, $options: 'i' };
     if (tag) query.tags = { $in: [tag] };
 

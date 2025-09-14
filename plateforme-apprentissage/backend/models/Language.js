@@ -119,8 +119,7 @@ const languageSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Index pour la recherche et les performances
-languageSchema.index({ code: 1 });
+// Index pour la recherche et les performances (code déjà unique via le champ)
 languageSchema.index({ estActif: 1 });
 languageSchema.index({ estParDefaut: 1 });
 
