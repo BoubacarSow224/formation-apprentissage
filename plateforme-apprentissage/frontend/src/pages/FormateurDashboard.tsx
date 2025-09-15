@@ -656,7 +656,7 @@ const FormateurDashboard: React.FC = () => {
           <Typography color="text.secondary" paragraph>
             Partagez vos connaissances avec la communauté en créant un nouveau cours.
           </Typography>
-          <Button variant="contained" size="large" startIcon={<Add />}>
+          <Button variant="contained" size="large" startIcon={<Add />} onClick={() => navigate('/formateur/cours/nouveau')}>
             Commencer la création
           </Button>
         </Paper>

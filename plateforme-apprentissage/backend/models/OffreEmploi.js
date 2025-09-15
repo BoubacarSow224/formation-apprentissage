@@ -170,6 +170,10 @@ offreEmploiSchema.index({
   'localisation.ville': 'text'
 });
 
+// Index pour le filtrage ciblé
+offreEmploiSchema.index({ badgesRequis: 1 });
+offreEmploiSchema.index({ competencesRequises: 1 });
+
 // Middleware pour mettre à jour le statut en fonction de la date limite
 offreEmploiSchema.pre('save', function(next) {
   const maintenant = new Date();

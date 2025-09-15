@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const StudySession = require('../models/StudySession');
 const path = require('path');
 const fs = require('fs').promises;
 const bcrypt = require('bcryptjs');
@@ -313,17 +314,39 @@ exports.updateProfile = async (req, res) => {
 // Obtenir le profil de l'utilisateur connecté via la route /me
 exports.me = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id)
+      .select('-password')
+      .populate({
+        path: 'coursSuivis.cours',
+        select: 'titre formateur',
+        populate: { path: 'formateur', select: 'nom' }
+      })
+      .populate({
+        path: 'badgesObtenus.badge',
+        select: 'nom niveau'
+      });
     if (!user) {
       return res.status(404).json({ 
         success: false,
         message: 'Utilisateur non trouvé' 
       });
     }
-    
+    // Agréger les heures d'étude totales à la volée
+    let totalHours = 0;
+    try {
+      const totalAgg = await StudySession.aggregate([
+        { $match: { user: require('mongoose').Types.ObjectId.createFromHexString(req.user.id), endedAt: { $exists: true } } },
+        { $group: { _id: null, totalMs: { $sum: '$durationMs' } } }
+      ]);
+      const totalMs = totalAgg?.[0]?.totalMs || 0;
+      totalHours = Math.round((totalMs / 3600000) * 100) / 100;
+    } catch (e) {
+      // noop
+    }
+
     res.json({
       success: true,
-      user
+      user: { ...user.toObject(), totalHours }
     });
   } catch (error) {
     console.error('Erreur lors de la récupération du profil:', error);

@@ -224,8 +224,9 @@ const Community: React.FC = () => {
     setLoadingInvites(true);
     try {
       const res = await groupeService.getMesInvitations();
-      const list = res.data || res;
-      setMyInvites(Array.isArray(list) ? list : []);
+      // groupeService.getMesInvitations() renvoie le corps JSON: { success, count, data: [...] }
+      const list = Array.isArray((res as any)?.data) ? (res as any).data : [];
+      setMyInvites(list);
     } catch (e) {
       setMyInvites([]);
     } finally {
@@ -237,6 +238,8 @@ const Community: React.FC = () => {
     try {
       await groupeService.repondreInvitation(groupeId, invitationId, action);
       await fetchMyInvites();
+      // Rafraîchir aussi la liste des groupes pour afficher immédiatement le nouveau groupe accepté
+      await fetchCommunityData();
     } catch (e) {
       // noop (les erreurs seront visibles côté backend si besoin)
     }
@@ -908,9 +911,71 @@ const Community: React.FC = () => {
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        {/* Groupes */}
+        {/* Mes invitations (apprenant) + Groupes */}
         <Grid container spacing={3}>
           <Grid item xs={12} md={8}>
+            {/* Section Mes invitations (apprenant) */}
+            {user && (user as any)?.role === 'apprenant' && (
+              <Card sx={{ mb: 3 }}>
+                <CardContent>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6">Mes invitations</Typography>
+                    <Button variant="outlined" size="small" onClick={fetchMyInvites} disabled={loadingInvites}>
+                      {loadingInvites ? 'Chargement...' : 'Actualiser'}
+                    </Button>
+                  </Box>
+                  {!loadingInvites && (!myInvites || myInvites.length === 0) && (
+                    <Typography variant="body2" color="text.secondary">
+                      Aucune invitation en attente.
+                    </Typography>
+                  )}
+                  <List>
+                    {(myInvites || []).map((inv: any) => (
+                      <React.Fragment key={`${inv.groupeId}-${inv.invitationId}`}>
+                        <ListItem alignItems="flex-start" sx={{ alignItems: 'stretch' }}>
+                          <ListItemAvatar>
+                            <Avatar>{(inv?.groupeNom || 'G')?.charAt(0)?.toUpperCase?.() || 'G'}</Avatar>
+                          </ListItemAvatar>
+                          <ListItemText
+                            primary={
+                              <Typography variant="subtitle1" fontWeight="bold">
+                                {inv.groupeNom}
+                              </Typography>
+                            }
+                            secondary={
+                              <Box>
+                                <Typography variant="body2" color="text.secondary" paragraph sx={{ mb: 1 }}>
+                                  Invité par {inv?.formateur?.nom || 'Formateur'} • Statut: {inv?.statut}
+                                </Typography>
+                                <Box display="flex" gap={1}>
+                                  <Button
+                                    variant="contained"
+                                    size="small"
+                                    color="success"
+                                    onClick={() => respondInvite(inv.groupeId, inv.invitationId, 'accepte')}
+                                  >
+                                    Accepter
+                                  </Button>
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    color="inherit"
+                                    onClick={() => respondInvite(inv.groupeId, inv.invitationId, 'refuse')}
+                                  >
+                                    Refuser
+                                  </Button>
+                                </Box>
+                              </Box>
+                            }
+                          />
+                        </ListItem>
+                        <Divider component="li" />
+                      </React.Fragment>
+                    ))}
+                  </List>
+                </CardContent>
+              </Card>
+            )}
             {/* Créer un groupe */}
             {user && (['formateur', 'admin'].includes((user as any)?.role)) && (
               <Card sx={{ mb: 3 }}>
@@ -1022,22 +1087,25 @@ const Community: React.FC = () => {
                               </Typography>
                             )}
 
-                            {/* Publications du groupe (réservées aux membres) */}
-                            {user && g.isMember && (
+                            {/* Publications du groupe (réservées aux membres et au propriétaire) */}
+                            {user && (g.isMember || g.isOwner) && (
                               <Box mt={1}>
                                 <Typography variant="subtitle2" gutterBottom>Publications</Typography>
-                                <Box display="flex" gap={1} alignItems="center" mb={1}>
-                                  <TextField
-                                    size="small"
-                                    fullWidth
-                                    placeholder="Publier dans le groupe..."
-                                    value={groupPostInputs[g.id] || ''}
-                                    onChange={(e) => handleGroupPostInputChange(g.id, e.target.value)}
-                                  />
-                                  <Button size="small" variant="contained" onClick={() => handleCreateGroupPost(g.id)} disabled={!((groupPostInputs[g.id] || '').trim())}>
-                                    Publier
-                                  </Button>
-                                </Box>
+                                {/* Saisie de publication: autorisée à tous les membres (y compris propriétaire) */}
+                                {(g.isOwner || g.isMember) && (
+                                  <Box display="flex" gap={1} alignItems="center" mb={1}>
+                                    <TextField
+                                      size="small"
+                                      fullWidth
+                                      placeholder="Publier dans le groupe..."
+                                      value={groupPostInputs[g.id] || ''}
+                                      onChange={(e) => handleGroupPostInputChange(g.id, e.target.value)}
+                                    />
+                                    <Button size="small" variant="contained" onClick={() => handleCreateGroupPost(g.id)} disabled={!((groupPostInputs[g.id] || '').trim())}>
+                                      Publier
+                                    </Button>
+                                  </Box>
+                                )}
                                 <Box mb={1}>
                                   <Button size="small" variant="outlined" onClick={() => fetchGroupPosts(g.id)} disabled={loadingGroupPosts[g.id] === true}>
                                     {loadingGroupPosts[g.id] ? 'Chargement...' : 'Afficher les publications'}

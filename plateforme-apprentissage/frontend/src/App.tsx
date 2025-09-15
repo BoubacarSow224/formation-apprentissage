@@ -12,6 +12,8 @@ import CourseDetail from './pages/courses/CourseDetail';
 import Quiz from './pages/quiz/Quiz';
 import Community from './pages/community/Community';
 import Jobs from './pages/jobs/Jobs';
+import JobDetail from './pages/jobs/JobDetail';
+import MesCandidatures from './pages/jobs/MesCandidatures';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import MesGroupes from './pages/groupes/MesGroupes';
@@ -78,6 +80,16 @@ function App() {
               <Route path="/jobs" element={
                 <ProtectedRoute>
                   <Jobs />
+                </ProtectedRoute>
+              } />
+              <Route path="/jobs/:id" element={
+                <ProtectedRoute>
+                  <JobDetail />
+                </ProtectedRoute>
+              } />
+              <Route path="/mes-candidatures" element={
+                <ProtectedRoute>
+                  <MesCandidatures />
                 </ProtectedRoute>
               } />
               <Route path="/profile" element={

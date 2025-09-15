@@ -68,6 +68,7 @@ import {
   CloudSync
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
+import offreEmploiService, { OffreEmploi } from '../../services/offreEmploiService';
 
 interface SystemStats {
   users: {
@@ -92,6 +93,12 @@ interface SystemStats {
     total: number;
     active: number;
   };
+  jobs?: {
+    total: number;
+    pending: number;
+    open?: number;
+  };
+  health?: any;
 }
 
 interface User {
@@ -145,6 +152,8 @@ const SuperAdminPanel: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [jobs, setJobs] = useState<OffreEmploi[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [moderationDialogOpen, setModerationDialogOpen] = useState(false);
@@ -160,6 +169,94 @@ const SuperAdminPanel: React.FC = () => {
     telephone: '',
     password: ''
   });
+  const [systemStatsUpdatedAt, setSystemStatsUpdatedAt] = useState<Date | null>(null);
+  const [quickActionsLoading, setQuickActionsLoading] = useState<{ export: boolean; backup: boolean; health: boolean }>({ export: false, backup: false, health: false });
+  // Confirmation approbation / rejet
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmActionType, setConfirmActionType] = useState<'approve' | 'reject' | null>(null);
+  const [confirmJob, setConfirmJob] = useState<OffreEmploi | null>(null);
+
+  // Emplois: chargement et actions
+  const loadJobs = async () => {
+    try {
+      setJobsLoading(true);
+      const resPending = await offreEmploiService.getOffres({ statut: 'en_attente', page: 1, limit: 50 });
+      let items = resPending.items;
+      if (!items || items.length === 0) {
+        const resAll = await offreEmploiService.getOffres({ page: 1, limit: 50 });
+        items = resAll.items;
+      }
+      setJobs(items || []);
+    } catch (e) {
+      console.error('Erreur lors du chargement des offres:', e);
+      setJobs([]);
+    } finally {
+      setJobsLoading(false);
+    }
+  };
+
+  // Formatters pour emplois (localisation/salaire)
+  const formatLocalisation = (loc: any): string => {
+    if (!loc) return '—';
+    if (typeof loc === 'string') return loc;
+    const ville = loc.ville || '';
+    const pays = loc.pays || '';
+    const parts = [ville, pays].filter(Boolean);
+    return parts.length ? parts.join(', ') : '—';
+  };
+
+  const formatSalaire = (sal: any): string => {
+    if (!sal) return '—';
+    if (typeof sal === 'string') return sal;
+    const min = sal.min;
+    const devise = sal.devise || '';
+    const periode = sal.periode ? ` /${sal.periode}` : '';
+    if (typeof min === 'number') {
+      return `${min.toLocaleString()}${devise ? ' ' + devise : ''}${periode}`.trim();
+    }
+    return devise || '—';
+  };
+
+  const approveJob = async (job: OffreEmploi) => {
+    try {
+      await offreEmploiService.mettreAJourOffre(job._id, { statut: 'publiee' } as any);
+      await loadJobs();
+      setSnack({ open: true, message: 'Offre publiée', severity: 'success' });
+    } catch (e) {
+      console.error('Erreur approbation offre:', e);
+      setSnack({ open: true, message: 'Erreur lors de la publication', severity: 'error' });
+    }
+  };
+
+  const rejectJob = async (job: OffreEmploi) => {
+    try {
+      await offreEmploiService.mettreAJourOffre(job._id, { statut: 'annulee' } as any);
+      await loadJobs();
+      setSnack({ open: true, message: 'Offre annulée', severity: 'success' });
+    } catch (e) {
+      console.error('Erreur rejet offre:', e);
+      setSnack({ open: true, message: 'Erreur lors de l\'annulation', severity: 'error' });
+    }
+  };
+
+  const openConfirm = (action: 'approve' | 'reject', job: OffreEmploi) => {
+    setConfirmActionType(action);
+    setConfirmJob(job);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirm = async () => {
+    if (!confirmActionType || !confirmJob) return;
+    const job = confirmJob;
+    setConfirmOpen(false);
+    setConfirmActionType(null);
+    setConfirmJob(null);
+    if (confirmActionType === 'approve') {
+      await approveJob(job);
+    } else {
+      await rejectJob(job);
+    }
+  };
 
   // Charger les statistiques système
   const loadSystemStats = async () => {
@@ -174,11 +271,94 @@ const SuperAdminPanel: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setSystemStats(data.data);
+        setSystemStatsUpdatedAt(new Date());
       }
     } catch (error) {
       console.error('Erreur lors du chargement des statistiques:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Exporter les données (téléchargement fichier)
+  const handleExportData = async () => {
+    try {
+      setQuickActionsLoading((s) => ({ ...s, export: true }));
+      const res = await fetch('http://localhost:5006/api/admin/export', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!res.ok) throw new Error('Export échoué');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd || '');
+      const filename = decodeURIComponent((match?.[1] || match?.[2] || 'export-donnees.json'));
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setSnack({ open: true, message: 'Export des données téléchargé', severity: 'success' });
+    } catch (e) {
+      console.error(e);
+      setSnack({ open: true, message: 'Erreur lors de l\'export des données', severity: 'error' });
+    } finally {
+      setQuickActionsLoading((s) => ({ ...s, export: false }));
+    }
+  };
+
+  // Sauvegarde DB (dump JSON)
+  const handleBackupDB = async () => {
+    try {
+      setQuickActionsLoading((s) => ({ ...s, backup: true }));
+      const res = await fetch('http://localhost:5006/api/admin/backup', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      if (!res.ok) throw new Error('Sauvegarde échouée');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd || '');
+      const filename = decodeURIComponent((match?.[1] || match?.[2] || 'backup-db.json'));
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      setSnack({ open: true, message: 'Sauvegarde DB téléchargée', severity: 'success' });
+    } catch (e) {
+      console.error(e);
+      setSnack({ open: true, message: 'Erreur lors de la sauvegarde DB', severity: 'error' });
+    } finally {
+      setQuickActionsLoading((s) => ({ ...s, backup: false }));
+    }
+  };
+
+  // Santé système
+  const handleHealthCheck = async () => {
+    try {
+      setQuickActionsLoading((s) => ({ ...s, health: true }));
+      const res = await fetch('http://localhost:5006/api/admin/health', { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+      if (res.ok) {
+        const j = await res.json();
+        const data = j?.data || j;
+        setSystemStats((prev) => ({ ...(prev || {} as any), health: data } as any));
+        setSystemStatsUpdatedAt(new Date());
+        setSnack({ open: true, message: 'Santé système actualisée', severity: 'success' });
+      } else {
+        await loadSystemStats();
+        setSnack({ open: true, message: 'Santé système actualisée via system-stats', severity: 'info' });
+      }
+    } catch (e) {
+      console.error(e);
+      setSnack({ open: true, message: 'Erreur lors de la récupération de la santé système', severity: 'error' });
+    } finally {
+      setQuickActionsLoading((s) => ({ ...s, health: false }));
     }
   };
 
@@ -368,6 +548,7 @@ const SuperAdminPanel: React.FC = () => {
     loadUsers();
     loadCourses();
     loadPosts();
+    loadJobs();
   }, []);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -422,6 +603,20 @@ const SuperAdminPanel: React.FC = () => {
 
       {/* Statistiques rapides */}
       {systemStats && (
+        <>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="h6" sx={{ m: 0 }}>Statistiques rapides</Typography>
+          <Box display="flex" alignItems="center" gap={2}>
+            {systemStatsUpdatedAt && (
+              <Typography variant="caption" color="text.secondary">
+                Dernière mise à jour: {systemStatsUpdatedAt.toLocaleTimeString()}
+              </Typography>
+            )}
+            <Button size="small" variant="outlined" startIcon={<Refresh />} onClick={loadSystemStats}>
+              Actualiser les stats
+            </Button>
+          </Box>
+        </Box>
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} sm={6} md={3}>
             <Card>
@@ -453,10 +648,23 @@ const SuperAdminPanel: React.FC = () => {
                       Cours Publiés
                     </Typography>
                     <Typography variant="h4">
-                      {systemStats.courses.published}
+                      {systemStats?.courses?.published ?? (
+                        courses.filter((c: any) => {
+                          const statut = ((c?.statut || '') as string).toLowerCase();
+                          const approuve = !!c?.estApprouve;
+                          const publie = !!c?.estPublic || statut === 'publie';
+                          return approuve && publie;
+                        }).length
+                      )}
                     </Typography>
                     <Typography variant="body2" color="warning.main">
-                      {systemStats.courses.pending} en attente
+                      {(systemStats?.courses?.pending ?? (
+                        courses.filter((c: any) => {
+                          const mod = (c?.statutModeration || '').toLowerCase();
+                          const approuve = !!c?.estApprouve;
+                          return mod === 'en_attente' || !approuve;
+                        }).length
+                      ))} en attente
                     </Typography>
                   </Box>
                   <School fontSize="large" color="secondary" />
@@ -477,10 +685,10 @@ const SuperAdminPanel: React.FC = () => {
                       Quiz Actifs
                     </Typography>
                     <Typography variant="h4">
-                      {systemStats.quizzes.active}
+                      {systemStats?.quizzes?.active ?? 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      sur {systemStats.quizzes.total}
+                      sur {systemStats?.quizzes?.total ?? 0}
                     </Typography>
                   </Box>
                   <Quiz fontSize="large" color="success" />
@@ -489,6 +697,7 @@ const SuperAdminPanel: React.FC = () => {
             </Card>
           </Grid>
         </Grid>
+        </>
       )}
 
       {/* Actions rapides */}
@@ -514,6 +723,8 @@ const SuperAdminPanel: React.FC = () => {
               variant="outlined"
               startIcon={<GetApp />}
               color="secondary"
+              disabled={quickActionsLoading.export}
+              onClick={handleExportData}
             >
               Exporter Données
             </Button>
@@ -521,6 +732,8 @@ const SuperAdminPanel: React.FC = () => {
               variant="outlined"
               startIcon={<Storage />}
               color="info"
+              disabled={quickActionsLoading.backup}
+              onClick={handleBackupDB}
             >
               Sauvegarde DB
             </Button>
@@ -528,6 +741,8 @@ const SuperAdminPanel: React.FC = () => {
               variant="outlined"
               startIcon={<MonitorHeart />}
               color="success"
+              disabled={quickActionsLoading.health}
+              onClick={handleHealthCheck}
             >
               Santé Système
             </Button>
@@ -771,13 +986,23 @@ const SuperAdminPanel: React.FC = () => {
                   variant="contained"
                   startIcon={<CheckCircle />}
                   color="success"
+                  onClick={async () => {
+                    for (const j of jobs) {
+                      if (((j as any).statut || 'en_attente') === 'en_attente') {
+                        try { await offreEmploiService.mettreAJourOffre(j._id, { statut: 'publiee' } as any); } catch {}
+                      }
+                    }
+                    await loadJobs();
+                  }}
                 >
                   Valider Toutes
                 </Button>
               </Box>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Modérez les annonces d'emploi publiées par les entreprises avant leur publication.
-              </Alert>
+              {jobs.filter((j: any) => (j?.statut || 'en_attente') === 'en_attente').length > 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  {jobs.filter((j: any) => (j?.statut || 'en_attente') === 'en_attente').length} offre(s) en attente de modération.
+                </Alert>
+              )}
               <TableContainer component={Paper}>
                 <Table>
                   <TableHead>
@@ -791,26 +1016,47 @@ const SuperAdminPanel: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    <TableRow>
-                      <TableCell>Développeur Full Stack</TableCell>
-                      <TableCell>TechCorp SARL</TableCell>
-                      <TableCell>Dakar, Sénégal</TableCell>
-                      <TableCell>800,000 FCFA</TableCell>
-                      <TableCell>
-                        <Chip label="En attente" color="warning" size="small" />
-                      </TableCell>
-                      <TableCell>
-                        <IconButton color="success">
-                          <CheckCircle />
-                        </IconButton>
-                        <IconButton color="error">
-                          <Cancel />
-                        </IconButton>
-                        <IconButton>
-                          <Visibility />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
+                    {jobsLoading && (
+                      <TableRow>
+                        <TableCell colSpan={6}><LinearProgress /></TableCell>
+                      </TableRow>
+                    )}
+                    {(!jobsLoading && jobs.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={6} align="center">
+                          <Typography variant="body2" color="text.secondary">Aucune offre d'emploi à modérer</Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {jobs.map((job) => (
+                      <TableRow key={job._id} hover>
+                        <TableCell>{job.titre}</TableCell>
+                        <TableCell>{job.entreprise?.nom || '—'}</TableCell>
+                        <TableCell>{formatLocalisation((job as any).localisation || (job as any).lieu)}</TableCell>
+                        <TableCell>{formatSalaire((job as any).salaire)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const st = (job as any).statut || 'en_attente';
+                            let color: any = 'warning';
+                            let label = 'En attente';
+                            if (st === 'publiee') { color = 'success'; label = 'Publiée'; }
+                            else if (st === 'annulee') { color = 'error'; label = 'Annulée'; }
+                            return <Chip label={label} color={color} size="small" />;
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          <IconButton color="success" onClick={() => openConfirm('approve', job)}>
+                            <CheckCircle />
+                          </IconButton>
+                          <IconButton color="error" onClick={() => openConfirm('reject', job)}>
+                            <Cancel />
+                          </IconButton>
+                          <IconButton onClick={() => window.open(`/jobs/${job._id}`, '_blank')}>
+                            <Visibility />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -864,6 +1110,31 @@ const SuperAdminPanel: React.FC = () => {
                     </CardContent>
                   </Card>
                 </Grid>
+
+                <Grid item xs={12} md={6}>
+                  <Card>
+                    <CardContent>
+                      <Box display="flex" justifyContent="space-between" alignItems="center">
+                        <Typography variant="h6" gutterBottom sx={{ mb: 0 }}>
+                          Offres d'emploi en Attente
+                        </Typography>
+                        <Button size="small" startIcon={<Refresh />} onClick={loadJobs} disabled={jobsLoading}>
+                          Actualiser
+                        </Button>
+                      </Box>
+                      <Typography variant="h4" color="warning.main">
+                        {jobs.filter((j: any) => (j?.statut || 'en_attente') === 'en_attente').length}
+                      </Typography>
+                      <Box mt={1} display="flex" gap={1}>
+                        <Button size="small" variant="outlined" onClick={() => setActiveTab(2)}>Aller à l'onglet Emplois</Button>
+                        <Button size="small" variant="contained" color="success" disabled={jobs.length === 0} onClick={async () => {
+                          for (const j of jobs) { if ((j as any).statut === 'en_attente') { try { await offreEmploiService.mettreAJourOffre(j._id, { statut: 'ouverte' } as any); } catch {} } }
+                          await loadJobs();
+                        }}>Valider toutes</Button>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Grid>
               </Grid>
             </Box>
           )}
@@ -886,14 +1157,15 @@ const SuperAdminPanel: React.FC = () => {
                         Utilisateurs Totaux
                       </Typography>
                       <Typography variant="h4">
-                        {systemStats?.users.total || 0}
+                        {systemStats?.users.total ?? 0}
                       </Typography>
                       <Typography variant="body2" color="success.main">
-                        {systemStats?.users.active || 0} actifs
+                        {systemStats?.users.active ?? 0} actifs
                       </Typography>
                     </CardContent>
                   </Card>
                 </Grid>
+
                 <Grid item xs={12} sm={6} md={3}>
                   <Card>
                     <CardContent>
@@ -901,14 +1173,15 @@ const SuperAdminPanel: React.FC = () => {
                         Cours & Badges
                       </Typography>
                       <Typography variant="h4">
-                        {systemStats?.courses.total || 0}
+                        {systemStats?.courses.total ?? 0}
                       </Typography>
                       <Typography variant="body2" color="info.main">
-                        0 badges
+                        {(systemStats as any)?.badges?.total ?? 0} badges
                       </Typography>
                     </CardContent>
                   </Card>
                 </Grid>
+
                 <Grid item xs={12} sm={6} md={3}>
                   <Card>
                     <CardContent>
@@ -916,14 +1189,15 @@ const SuperAdminPanel: React.FC = () => {
                         Certificats
                       </Typography>
                       <Typography variant="h4">
-                        0
+                        {(systemStats as any)?.certificats?.total ?? 0}
                       </Typography>
                       <Typography variant="body2" color="success.main">
-                        0 valides
+                        {(systemStats as any)?.certificats?.valides ?? 0} valides
                       </Typography>
                     </CardContent>
                   </Card>
                 </Grid>
+
                 <Grid item xs={12} sm={6} md={3}>
                   <Card>
                     <CardContent>
@@ -931,15 +1205,59 @@ const SuperAdminPanel: React.FC = () => {
                         Emplois
                       </Typography>
                       <Typography variant="h4">
-                        0
+                        {systemStats?.jobs?.total ?? jobs.length}
                       </Typography>
                       <Typography variant="body2" color="warning.main">
-                        0 en attente
+                        {systemStats?.jobs?.pending ?? jobs.filter((j: any) => (j?.statut || 'en_attente') === 'en_attente').length} en attente
                       </Typography>
                     </CardContent>
                   </Card>
                 </Grid>
               </Grid>
+
+              {(systemStats as any)?.health && (
+                <Grid container spacing={3} sx={{ mt: 1 }}>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" gutterBottom>
+                          CPU
+                        </Typography>
+                        <Typography variant="h5">
+                          {((systemStats as any).health.cpu?.usage ?? 0)}%
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Cores: {((systemStats as any).health.cpu?.cores ?? '—')}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" gutterBottom>
+                          Mémoire
+                        </Typography>
+                        <Typography variant="h5">
+                          {((systemStats as any).health.memory?.used ?? 0)} / {((systemStats as any).health.memory?.total ?? 0)} Mo
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" gutterBottom>
+                          Stockage
+                        </Typography>
+                        <Typography variant="h5">
+                          {((systemStats as any).health.storage?.used ?? 0)} / {((systemStats as any).health.storage?.total ?? 0)} Go
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+              )}
               <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
                   <Card>
@@ -1003,6 +1321,26 @@ const SuperAdminPanel: React.FC = () => {
           {snack.message}
         </Alert>
       </Snackbar>
+
+      {/* Dialog de confirmation approbation / rejet */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>
+          {confirmActionType === 'approve' ? 'Confirmer la publication' : 'Confirmer l\'annulation'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            {confirmActionType === 'approve'
+              ? `Voulez-vous publier cette offre${confirmJob ? ` : "${confirmJob.titre}"` : ''} ?`
+              : `Voulez-vous annuler cette offre${confirmJob ? ` : "${confirmJob.titre}"` : ''} ?`}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Annuler</Button>
+          <Button variant="contained" color={confirmActionType === 'approve' ? 'success' : 'error'} onClick={handleConfirm}>
+            {confirmActionType === 'approve' ? 'Publier' : 'Annuler l\'offre'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Dialog de création/modification d'utilisateur */}
       <Dialog open={userDialogOpen} onClose={() => setUserDialogOpen(false)} maxWidth="sm" fullWidth>

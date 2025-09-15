@@ -10,6 +10,114 @@ exports.getOffresEmploi = asyncHandler(async (req, res, next) => {
   res.status(200).json(res.advancedResults);
 });
 
+// @desc    Rechercher les candidats d'une offre filtrés par badge requis (présenté)
+// @route   GET /api/offres-emploi/:id/candidatures
+// @access  Privé (Entreprise/Admin)
+exports.rechercherCandidatsParBadgeDansOffre = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  const { badgeId } = req.query;
+
+  const offre = await OffreEmploi.findById(id).populate('candidats.utilisateur', 'nom email photoProfil').lean();
+  if (!offre) {
+    return next(new ErrorResponse(`Offre d'emploi non trouvée avec l'ID ${id}`, 404));
+  }
+  // Autorisation: propriétaire entreprise ou admin
+  if (String(offre.entreprise) !== String(req.user.id) && req.user.role !== 'admin') {
+    return next(new ErrorResponse(`Vous n'êtes pas autorisé à consulter ces candidatures`, 401));
+  }
+
+  let candidats = offre.candidats || [];
+  if (badgeId) {
+    const bid = String(badgeId);
+    candidats = candidats.filter(c => (c.badgesPresentes || []).some(b => String(b) === bid));
+  }
+
+  const data = candidats.map(c => ({
+    candidatureId: c._id,
+    utilisateur: c.utilisateur,
+    statut: c.statut,
+    dateCandidature: c.dateCandidature,
+    badgesPresentes: c.badgesPresentes || [],
+    offreId: offre._id
+  }));
+
+  return res.status(200).json({ success: true, count: data.length, data });
+});
+
+// @desc    Rechercher tous les candidats aux offres d'une entreprise filtrés par badge
+// @route   GET /api/offres-emploi/entreprise/:entrepriseId/candidats
+// @access  Privé (Entreprise/Admin)
+exports.rechercherCandidatsEntrepriseParBadge = asyncHandler(async (req, res, next) => {
+  const { entrepriseId } = req.params;
+  const { badgeId } = req.query;
+
+  // Autorisation: l'entreprise elle-même ou admin
+  if (String(entrepriseId) !== String(req.user.id) && req.user.role !== 'admin') {
+    return next(new ErrorResponse(`Vous n'êtes pas autorisé à accéder à ces données`, 401));
+  }
+
+  const filtreOffres = { entreprise: entrepriseId };
+  const offres = await OffreEmploi.find(filtreOffres).select('candidats').lean();
+
+  const bid = badgeId ? String(badgeId) : null;
+  const candidats = [];
+
+  for (const off of offres) {
+    for (const c of (off.candidats || [])) {
+      if (!bid || (c.badgesPresentes || []).some(b => String(b) === bid)) {
+        candidats.push({
+          offreId: off._id,
+          candidatureId: c._id,
+          utilisateur: c.utilisateur,
+          statut: c.statut,
+          dateCandidature: c.dateCandidature,
+          badgesPresentes: c.badgesPresentes || []
+        });
+      }
+    }
+  }
+
+  // Option: peupler les utilisateurs en un seul appel
+  // Récupérer les IDs uniques
+  const userIds = [...new Set(candidats.map(c => String(c.utilisateur)))];
+  const users = await User.find({ _id: { $in: userIds } }).select('nom email photoProfil').lean();
+  const usersMap = new Map(users.map(u => [String(u._id), u]));
+
+  const enriched = candidats.map(c => ({
+    ...c,
+    utilisateur: usersMap.get(String(c.utilisateur)) || { _id: c.utilisateur }
+  }));
+
+  return res.status(200).json({ success: true, count: enriched.length, data: enriched });
+});
+
+// @desc    Récupérer les offres auxquelles l'utilisateur a postulé
+// @route   GET /api/offres-emploi/mes-candidatures
+// @access  Privé (Apprenant/Formateur)
+exports.getMesCandidatures = asyncHandler(async (req, res, next) => {
+  const userId = req.user.id;
+  const candidatures = await OffreEmploi.find({ 'candidats.utilisateur': userId })
+    .select('titre entreprise typeContrat salaire description candidats dateCreation')
+    .populate('entreprise', 'nom logo')
+    .lean();
+
+  const items = (candidatures || []).map(offre => {
+    const c = (offre.candidats || []).find(x => String(x.utilisateur) === String(userId));
+    return {
+      _id: offre._id,
+      titre: offre.titre,
+      entreprise: offre.entreprise,
+      typeContrat: offre.typeContrat,
+      salaire: offre.salaire,
+      description: offre.description,
+      dateCreation: offre.dateCreation,
+      candidature: c ? { statut: c.statut, dateCandidature: c.dateCandidature, commentaire: c.commentaire } : null,
+    };
+  });
+
+  res.status(200).json({ success: true, count: items.length, data: items });
+});
+
 // @desc    Récupérer une offre d'emploi spécifique
 // @route   GET /api/offres-emploi/:id
 // @access  Public
@@ -59,7 +167,76 @@ exports.createOffreEmploi = asyncHandler(async (req, res, next) => {
     );
   }
 
-  const offre = await OffreEmploi.create(req.body);
+  // Normalisation du payload depuis le frontend
+  const {
+    titre,
+    description,
+    typeContrat,
+    salaire,
+    lieu,
+    localisation,
+    dateExpiration,
+    competencesRequises,
+    badgesRequis
+  } = req.body || {};
+
+  const ville = (localisation && typeof localisation === 'string') ? localisation : (lieu || undefined);
+  const parsedSalaire = (() => {
+    if (typeof salaire === 'string') {
+      const digits = salaire.replace(/[^0-9]/g, '');
+      const n = Number(digits);
+      if (!Number.isNaN(n) && n > 0) return { min: n, devise: 'GNF', periode: 'mois' };
+    } else if (salaire && typeof salaire === 'object') {
+      return salaire; // déjà structuré
+    }
+    return undefined;
+  })();
+
+  const payload = {
+    titre,
+    description,
+    typeContrat,
+    entreprise: req.user && req.user.id ? req.user.id : (req.body && req.body.entreprise),
+    localisation: {
+      ville: ville || 'Conakry',
+      pays: 'Guinée',
+    },
+    competencesRequises: Array.isArray(competencesRequises) ? (competencesRequises.length ? competencesRequises : ['Général']) : ['Général'],
+    badgesRequis: Array.isArray(badgesRequis) ? badgesRequis : [],
+    salaire: parsedSalaire,
+    dateLimite: dateExpiration ? new Date(dateExpiration) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // par défaut +7 jours
+    statut: 'en_attente'
+  };
+
+  // Logs DEBUG
+  try {
+    console.log('[OffreEmploi][create] user:', { id: req.user && req.user.id, role: req.user && req.user.role });
+  } catch (e) {}
+  try {
+    console.log('[OffreEmploi][create] raw body:', req.body);
+  } catch (e) {}
+  try {
+    console.log('[OffreEmploi][create] normalized payload:', payload);
+  } catch (e) {}
+
+  let offre;
+  try {
+    offre = await OffreEmploi.create(payload);
+  } catch (err) {
+    console.error('[OffreEmploi][create] error:', err && err.message ? err.message : err);
+    if (err && err.errors) {
+      try {
+        const details = {};
+        for (const k in err.errors) {
+          if (Object.prototype.hasOwnProperty.call(err.errors, k)) {
+            details[k] = err.errors[k] && err.errors[k].message ? err.errors[k].message : String(err.errors[k]);
+          }
+        }
+        console.error('[OffreEmploi][create] validation errors:', details);
+      } catch (e) {}
+    }
+    return next(err);
+  }
 
   res.status(201).json({
     success: true,
@@ -89,8 +266,37 @@ exports.updateOffreEmploi = asyncHandler(async (req, res, next) => {
     );
   }
 
+  // Normaliser certains champs du body
+  const upd = { ...req.body };
+  // Traduire les statuts front vers l'enum du schéma
+  if (typeof upd.statut === 'string') {
+    const mapStatut = {
+      'ouverte': 'publiee',
+      'ouvert': 'publiee',
+      'rejete': 'annulee',
+      'rejetee': 'annulee',
+    };
+    const lower = upd.statut.toLowerCase();
+    upd.statut = mapStatut[lower] || upd.statut;
+  }
+  if (upd.dateExpiration) {
+    upd.dateLimite = new Date(upd.dateExpiration);
+    delete upd.dateExpiration;
+  }
+  if (typeof upd.lieu === 'string') {
+    upd.localisation = Object.assign({}, offre.localisation?.toObject?.() || offre.localisation || {}, { ville: upd.lieu });
+    delete upd.lieu;
+  } else if (typeof upd.localisation === 'string') {
+    upd.localisation = { ville: upd.localisation, pays: 'Guinée' };
+  }
+  if (typeof upd.salaire === 'string') {
+    const digits = upd.salaire.replace(/[^0-9]/g, '');
+    const n = Number(digits);
+    upd.salaire = !Number.isNaN(n) && n > 0 ? { min: n, devise: 'GNF', periode: 'mois' } : undefined;
+  }
+
   // Mise à jour de l'offre
-  offre = await OffreEmploi.findByIdAndUpdate(req.params.id, req.body, {
+  offre = await OffreEmploi.findByIdAndUpdate(req.params.id, upd, {
     new: true,
     runValidators: true
   });
@@ -153,8 +359,9 @@ exports.postulerOffreEmploi = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Vérifier si l'offre est toujours ouverte
-  if (offre.statut !== 'ouverte') {
+  // Vérifier si l'offre est toujours ouverte/publiée
+  const statutOuvert = ['ouverte', 'publiee'];
+  if (!statutOuvert.includes(offre.statut)) {
     return next(
       new ErrorResponse(
         `Cette offre d'emploi n'est plus disponible pour les candidatures`,
@@ -245,18 +452,41 @@ exports.mettreAJourCandidature = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Récupérer les offres d'emploi d'une entreprise
-// @route   GET /api/offres-emploi/entreprise/:entrepriseId
+// @desc    Récupérer les offres d'emploi d'une entreprise (avec pagination)
+// @route   GET /api/offres-emploi/entreprise/:entrepriseId?page=&limit=
 // @access  Public
 exports.getOffresParEntreprise = asyncHandler(async (req, res, next) => {
-  const offres = await OffreEmploi.find({
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.max(parseInt(req.query.limit, 10) || 10, 1);
+  const skip = (page - 1) * limit;
+
+  const filter = {
     entreprise: req.params.entrepriseId,
-    statut: 'ouverte'
-  }).sort('-dateCreation');
+    statut: { $in: ['ouverte', 'active', 'en_attente'] }
+  };
+
+  const [items, total] = await Promise.all([
+    OffreEmploi.find(filter)
+      .sort('-dateCreation')
+      .skip(skip)
+      .limit(limit),
+    OffreEmploi.countDocuments(filter)
+  ]);
+
+  const pagination = {};
+  const endIndex = page * limit;
+  if (endIndex < total) {
+    pagination.next = { page: page + 1, limit };
+  }
+  if (skip > 0) {
+    pagination.prev = { page: page - 1, limit };
+  }
 
   res.status(200).json({
     success: true,
-    count: offres.length,
-    data: offres
+    count: items.length,
+    total,
+    pagination,
+    data: items
   });
 });

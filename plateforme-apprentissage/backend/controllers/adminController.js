@@ -7,6 +7,8 @@ const Job = require('../models/Job');
 const Language = require('../models/Language');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
+const os = require('os');
+const path = require('path');
 
 // Obtenir les statistiques générales du dashboard admin
 const getAdminStats = async (req, res) => {
@@ -28,7 +30,12 @@ const getAdminStats = async (req, res) => {
 
     // Statistiques des cours
     const totalCourses = await Cours.countDocuments();
-    const publishedCourses = await Cours.countDocuments({ statut: 'publie' });
+    const publishedCourses = await Cours.countDocuments({
+      $or: [
+        { statut: 'publie' },
+        { estApprouve: true, estPublic: true }
+      ]
+    });
     const pendingModeration = await Cours.countDocuments({ statutModeration: 'en_attente' });
 
     // Statistiques des quiz
@@ -595,6 +602,7 @@ const moderateCourse = async (req, res) => {
       course.statutModeration = 'approuve';
       course.estApprouve = true; // approuvé côté système
       course.estPublic = true;   // publication automatique après approbation
+      course.statut = 'publie';  // compat héritée pour les compteurs
     } else if (action === 'reject') {
       course.statutModeration = 'rejete';
       course.raisonRejet = reason;
@@ -760,7 +768,12 @@ const getSystemStats = async (req, res) => {
     
     // Stats cours
     const totalCourses = await Cours.countDocuments();
-    const publishedCourses = await Cours.countDocuments({ statut: 'publie' });
+    const publishedCourses = await Cours.countDocuments({
+      $or: [
+        { statut: 'publie' },
+        { estApprouve: true, estPublic: true }
+      ]
+    });
     const pendingCourses = await Cours.countDocuments({ statutModeration: 'en_attente' });
     
     // Stats communauté
@@ -807,6 +820,95 @@ const getSystemStats = async (req, res) => {
       success: false,
       message: 'Erreur lors de la récupération des statistiques système'
     });
+  }
+};
+
+// Export des données (JSON en pièce jointe)
+const exportData = async (req, res) => {
+  try {
+    const [users, courses, quizzes, badges, certificats, jobs, languages] = await Promise.all([
+      User.find().select('-password').lean(),
+      Cours.find().lean(),
+      Quiz.find().lean(),
+      Badge.find().lean(),
+      Certificat.find().lean(),
+      Job.find().lean(),
+      Language.find().lean()
+    ]);
+
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      users,
+      courses,
+      quizzes,
+      badges,
+      certificats,
+      jobs,
+      languages
+    };
+
+    const json = JSON.stringify(payload, null, 2);
+    const filename = `export-donnees-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send(json);
+  } catch (error) {
+    console.error('Erreur export données:', error);
+    return res.status(500).json({ success: false, message: 'Erreur lors de l\'export des données' });
+  }
+};
+
+// Sauvegarde "légère" (dump JSON) – pour démo sans outils externes
+const backupDatabase = async (req, res) => {
+  try {
+    const [usersCount, coursesCount, quizzesCount, badgesCount, certifsCount, jobsCount, languagesCount] = await Promise.all([
+      User.countDocuments(), Cours.countDocuments(), Quiz.countDocuments(), Badge.countDocuments(), Certificat.countDocuments(), Job.countDocuments(), Language.countDocuments()
+    ]);
+
+    const summary = {
+      backupAt: new Date().toISOString(),
+      counts: { users: usersCount, courses: coursesCount, quizzes: quizzesCount, badges: badgesCount, certificats: certifsCount, jobs: jobsCount, languages: languagesCount }
+    };
+    const json = JSON.stringify(summary, null, 2);
+    const filename = `backup-db-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send(json);
+  } catch (error) {
+    console.error('Erreur sauvegarde DB:', error);
+    return res.status(500).json({ success: false, message: 'Erreur lors de la sauvegarde DB' });
+  }
+};
+
+// Santé système
+const getHealth = async (req, res) => {
+  try {
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const cpus = os.cpus() || [];
+
+    const data = {
+      status: 'healthy',
+      cpu: {
+        cores: cpus.length,
+        usage: Math.round((usedMem / totalMem) * 100) // approximation faute d\'API CPU % portable
+      },
+      memory: {
+        used: Math.round(usedMem / (1024 * 1024)),
+        total: Math.round(totalMem / (1024 * 1024))
+      },
+      storage: {
+        used: null,
+        total: null
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('Erreur santé système:', error);
+    return res.status(500).json({ success: false, message: 'Erreur lors de la récupération de la santé système' });
   }
 };
 
@@ -1451,6 +1553,9 @@ module.exports = {
   getPosts,
   deletePost,
   getSystemStats,
+  exportData,
+  backupDatabase,
+  getHealth,
   createAdmin,
   getBadges,
   createBadge,

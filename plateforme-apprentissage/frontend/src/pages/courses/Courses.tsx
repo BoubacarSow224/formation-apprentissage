@@ -43,13 +43,7 @@ const Courses: React.FC = () => {
   useEffect(() => {
     const fetchCours = async () => {
       try {
-        if (user?.role === 'apprenant') {
-          // Charger uniquement les cours publiés (approuvés & publics)
-          const arr = await coursService.getCoursPublics();
-          const list = Array.isArray((arr as any)?.data) ? (arr as any).data : (Array.isArray(arr) ? arr : []);
-          setCours(list as any);
-          setLastUpdate(new Date());
-        } else {
+        if (user?.role === 'formateur') {
           // Formateur: afficher tous ses cours
           const arr = await coursService.getMesCoursFormateur();
           let mine = (arr as any)?.data ?? (Array.isArray(arr) ? arr : []);
@@ -97,6 +91,12 @@ const Courses: React.FC = () => {
           const metaMap: Record<string, { steps: number; minutes: number }> = {};
           metas.forEach(([id, m]) => { metaMap[id] = m; });
           setMetaByCourse(metaMap);
+        } else {
+          // Tous les autres rôles (apprenant, admin, invité) voient le catalogue public (cours approuvés/publiés)
+          const arr = await coursService.getCoursPublics();
+          const list = Array.isArray((arr as any)?.data) ? (arr as any).data : (Array.isArray(arr) ? arr : []);
+          setCours(list as any);
+          setLastUpdate(new Date());
         }
       } catch (error) {
         console.error('Erreur lors du chargement des cours:', error);
@@ -109,9 +109,9 @@ const Courses: React.FC = () => {
 
     fetchCours();
 
-    // Polling auto pour l'apprenant: rafraîchir la liste toutes les 10s
+    // Polling auto pour le catalogue public: tous rôles sauf formateur
     let interval: any;
-    if (user?.role === 'apprenant') {
+    if (user?.role !== 'formateur') {
       interval = setInterval(() => {
         fetchCours();
       }, 10000);

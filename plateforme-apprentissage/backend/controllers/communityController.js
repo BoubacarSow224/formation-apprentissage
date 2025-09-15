@@ -54,13 +54,22 @@ exports.createGroupPost = async (req, res) => {
     const group = await Group.findById(groupId);
     if (!group || !group.isActive) return res.status(404).json({ success: false, message: 'Groupe non trouvé' });
     const uid = req.user.id.toString();
-    if (!group.members.find(m => m.toString() === uid)) {
-      return res.status(403).json({ success: false, message: 'Accès réservé aux membres du groupe' });
+    console.log('[createGroupPost] uid=', uid, 'groupId=', groupId, 'owner=', group.owner?.toString?.(), 'isMember=', !!group.members.find(m => m.toString() === uid));
+    // Autoriser la publication à tous les membres (y compris le propriétaire) - auto-réparation owner
+    const isOwner = group.owner.toString() === uid;
+    let isMember = group.members.find(m => m.toString() === uid);
+    if (isOwner && !isMember) {
+      try {
+        group.members.push(group.owner);
+        await group.save();
+        isMember = true;
+        console.log('[createGroupPost] Auto-added owner to members for group', groupId);
+      } catch (e) {
+        console.warn('[createGroupPost] Failed to auto-add owner as member:', e?.message);
+      }
     }
-
-    // Seul le propriétaire (formateur) peut publier dans le groupe
-    if (group.owner.toString() !== uid) {
-      return res.status(403).json({ success: false, message: 'Seul le formateur (propriétaire) peut publier dans le groupe.' });
+    if (!isOwner && !isMember) {
+      return res.status(403).json({ success: false, message: 'Seuls les membres du groupe peuvent publier.' });
     }
 
     const post = await Post.create({ content: content.trim(), author: uid, tags: tags || [], group: groupId });
@@ -80,9 +89,22 @@ exports.getGroupPosts = async (req, res) => {
     const group = await Group.findById(groupId);
     if (!group || !group.isActive) return res.status(404).json({ success: false, message: 'Groupe non trouvé' });
     const uid = req.user?.id?.toString();
-    // Permettre lecture aux membres uniquement (et au propriétaire)
-    if (!uid || !group.members.find(m => m.toString() === uid)) {
-      return res.status(403).json({ success: false, message: 'Accès réservé aux membres du groupe' });
+    console.log('[getGroupPosts] uid=', uid, 'groupId=', groupId, 'owner=', group.owner?.toString?.(), 'membersCount=', (group.members || []).length);
+    // Lecture autorisée aux membres et au propriétaire (auto-réparation: ajouter owner dans members si absent)
+    const isOwner = group.owner?.toString?.() === uid;
+    let isMember = Array.isArray(group.members) && group.members.find(m => m.toString() === uid);
+    if (isOwner && !isMember) {
+      try {
+        group.members.push(group.owner);
+        await group.save();
+        isMember = true;
+        console.log('[getGroupPosts] Auto-added owner to members for group', groupId);
+      } catch (e) {
+        console.warn('[getGroupPosts] Failed to auto-add owner as member:', e?.message);
+      }
+    }
+    if (!uid || (!isOwner && !isMember)) {
+      return res.status(403).json({ success: false, message: 'Accès réservé au propriétaire et aux membres du groupe' });
     }
 
     const query = { isActive: true, group: groupId };
@@ -110,8 +132,11 @@ exports.addGroupPostComment = async (req, res) => {
     const group = await Group.findById(groupId);
     if (!group || !group.isActive) return res.status(404).json({ success: false, message: 'Groupe non trouvé' });
     const uid = req.user.id.toString();
-    if (!group.members.find(m => m.toString() === uid)) {
-      return res.status(403).json({ success: false, message: 'Accès réservé aux membres du groupe' });
+    console.log('[addGroupPostComment] uid=', uid, 'groupId=', groupId, 'owner=', group.owner?.toString?.(), 'isMember=', !!group.members.find(m => m.toString() === uid));
+    const isOwner = group.owner.toString() === uid;
+    const isMember = group.members.find(m => m.toString() === uid);
+    if (!isOwner && !isMember) {
+      return res.status(403).json({ success: false, message: 'Accès réservé au propriétaire et aux membres du groupe' });
     }
 
     const post = await Post.findOne({ _id: postId, group: groupId, isActive: true });

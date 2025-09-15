@@ -66,9 +66,11 @@ const Navbar: React.FC = () => {
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button color="inherit" component={Link} to="/courses">
-            Cours
-          </Button>
+          {(!user || user.role !== 'entreprise') && (
+            <Button color="inherit" component={Link} to="/courses">
+              Cours
+            </Button>
+          )}
           {user && (user.role === 'formateur' || user.role === 'apprenant') && (
             <Button color="inherit" component={Link} to="/community">
               Communauté
@@ -77,7 +79,7 @@ const Navbar: React.FC = () => {
           <Button color="inherit" component={Link} to="/jobs">
             Emplois
           </Button>
-          {user && user.role !== 'apprenant' && user.role !== 'admin' && (
+          {user && user.role !== 'apprenant' && user.role !== 'admin' && user.role !== 'entreprise' && (
             <Button color="inherit" component={Link} to="/groupes">
               Groupes
             </Button>

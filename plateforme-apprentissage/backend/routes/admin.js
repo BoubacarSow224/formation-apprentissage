@@ -19,6 +19,9 @@ const {
   getPosts,
   deletePost,
   getSystemStats,
+  exportData,
+  backupDatabase,
+  getHealth,
   createAdmin,
   getBadges,
   createBadge,
@@ -85,6 +88,11 @@ router.delete('/posts/:id', deletePost);
 
 // Routes pour les statistiques système complètes
 router.get('/system-stats', getSystemStats);
+
+// Actions rapides (export / backup / health)
+router.get('/export', exportData);
+router.post('/backup', backupDatabase);
+router.get('/health', getHealth);
 
 // Route pour créer un admin (seul admin peut créer admin)
 router.post('/create-admin', createAdmin);

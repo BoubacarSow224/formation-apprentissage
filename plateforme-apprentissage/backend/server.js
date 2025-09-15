@@ -182,6 +182,11 @@ const groupeRoutes = require('./routes/groupeRoutes');
 app.use('/api/groupes', groupeRoutes);
 console.log('Route /api/groupes configurée');
 
+console.log('Configuration de la route /api/study...');
+const studyRoutes = require('./routes/studyRoutes');
+app.use('/api/study', studyRoutes);
+console.log('Route /api/study configurée');
+
 // Gestion des erreurs
 console.log('Configuration des gestionnaires d\'erreurs...');
 app.use(notFound); // Gestion des routes non trouvées

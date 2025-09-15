@@ -1,5 +1,6 @@
 const Groupe = require('../models/Groupe');
 const User = require('../models/User');
+const Group = require('../models/Group');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middleware/async');
 
@@ -22,6 +23,28 @@ exports.createGroupe = asyncHandler(async (req, res, next) => {
     membres: [],
     invitations: [],
   });
+
+  // Synchroniser avec le modèle Community Group pour visibilité immédiate côté Communauté
+  try {
+    let commGroup = await Group.findOne({ owner: formateur, name: groupe.nom, isActive: true });
+    if (!commGroup) {
+      commGroup = await Group.create({
+        name: groupe.nom,
+        description: groupe.description || '',
+        owner: formateur,
+        members: [formateur], // le formateur est membre pour accès direct
+      });
+    } else {
+      // S'assurer que le formateur est dans les membres
+      if (!commGroup.members.find((m) => m.toString() === formateur.toString())) {
+        commGroup.members.push(formateur);
+        await commGroup.save();
+      }
+    }
+  } catch (syncErr) {
+    console.error('Erreur sync Community Group à la création du Groupe:', syncErr);
+    // On ne bloque pas la création principale du Groupe académique
+  }
 
   res.status(201).json({ success: true, data: groupe });
 });
@@ -135,6 +158,28 @@ exports.repondreInvitation = asyncHandler(async (req, res, next) => {
     // Ajouter l’apprenant en membre si pas déjà
     if (!groupe.membres.some((m) => m.toString() === req.user.id)) {
       groupe.membres.push(req.user.id);
+    }
+
+    // Synchroniser avec le modèle Community Group pour visibilité dans /api/community/groups
+    try {
+      // Trouver ou créer le groupe Community correspondant (mappage par owner=formateur + name=nom)
+      let commGroup = await Group.findOne({ owner: groupe.formateur, name: groupe.nom, isActive: true });
+      if (!commGroup) {
+        commGroup = await Group.create({
+          name: groupe.nom,
+          description: groupe.description || '',
+          owner: groupe.formateur,
+          members: [groupe.formateur],
+        });
+      }
+      // Ajouter l’apprenant comme membre si absent
+      if (!commGroup.members.find((m) => m.toString() === req.user.id)) {
+        commGroup.members.push(req.user.id);
+        await commGroup.save();
+      }
+    } catch (syncErr) {
+      // On journalise mais on ne bloque pas la réponse principale
+      console.error('Erreur sync Community Group lors de l\'acceptation:', syncErr);
     }
   }
 
